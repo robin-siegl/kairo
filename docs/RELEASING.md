@@ -27,3 +27,7 @@ Keep an offline copy of the keystore and passwords. Production updates use the s
 ## Production APK
 
 Update `kairo.versionName` and increment `kairo.versionCode` in `gradle.properties`. Merge the version change to `main`, then run **Production APK** on `main`. With publication enabled, the workflow creates a version tag and attaches the verified APK and checksum to the GitHub Release.
+
+## Protect main
+
+After **Checks** has run successfully, import `.github/main-ruleset.json` under **Settings → Rules → Rulesets → New ruleset → Import a ruleset**. It requires pull requests, passing checks, and squash merges. It blocks deletion and force pushes, with no mandatory reviewer count for the solo repository.

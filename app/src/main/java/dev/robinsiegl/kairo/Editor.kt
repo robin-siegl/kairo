@@ -201,7 +201,7 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
             if (error == null && price != null) {
                 val newTerms = Terms(start, price.toPlainString(), currency, interval)
                 val terms = when {
-                    old == null -> listOf(newTerms)
+                    payment == null || old == null -> listOf(newTerms)
                     old.copy(effectiveFrom = old.firstCharge) == newTerms -> payment.terms
                     payment.charges(payment.terms.first().anchor, today.minusDays(1)).none() -> listOf(newTerms)
                     else -> payment.terms.filter { it.effectiveDate < today } + newTerms.copy(effectiveFrom = today.toString())

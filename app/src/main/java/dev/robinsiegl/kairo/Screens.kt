@@ -34,8 +34,9 @@ fun formatDate(date: LocalDate): String =
 
 fun money(amount: BigDecimal, currency: String): String =
     NumberFormat.getCurrencyInstance().apply {
-        this.currency = Currency.getInstance(currency)
-        maximumFractionDigits = this.currency.defaultFractionDigits.coerceAtLeast(0)
+        val unit = Currency.getInstance(currency)
+        this.currency = unit
+        maximumFractionDigits = unit.defaultFractionDigits.coerceAtLeast(0)
         minimumFractionDigits = maximumFractionDigits
     }.format(amount)
 
@@ -54,7 +55,11 @@ internal fun PaymentIcon(payment: Payment) {
         payment.image?.let {
             runCatching {
                 val bytes = Base64.decode(it, Base64.DEFAULT)
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                if (bounds.outWidth in 1..96 && bounds.outHeight in 1..96) {
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                } else null
             }.getOrNull()
         }
     }

@@ -29,8 +29,8 @@ class ReminderReceiver : BroadcastReceiver() {
 }
 
 class Reminders(private val context: Context) {
-    private val manager = context.getSystemService(NotificationManager::class.java)
-    private val alarm = context.getSystemService(AlarmManager::class.java)
+    private val manager = requireNotNull(context.getSystemService(NotificationManager::class.java))
+    private val alarm = requireNotNull(context.getSystemService(AlarmManager::class.java))
     private val delivered = context.getSharedPreferences("delivered", Context.MODE_PRIVATE)
 
     fun createChannels() {
@@ -47,6 +47,10 @@ class Reminders(private val context: Context) {
     fun channelEnabled(trial: Boolean): Boolean = enabled() &&
         manager.getNotificationChannel(if (trial) TRIALS else RENEWALS)?.importance !=
         NotificationManager.IMPORTANCE_NONE
+
+    fun dismiss(paymentId: String) {
+        manager.cancel(paymentId, 0)
+    }
 
     fun refresh(book: Book, deliver: Boolean = false) {
         createChannels()
@@ -70,23 +74,24 @@ class Reminders(private val context: Context) {
 
         for (payment in book.payments) {
             val trial = payment.isTrial(today)
-            if (payment.cancelled) manager.cancel(payment.id, 0)
             if (!channelEnabled(trial) || (trial && !prefs.trialReminders) || (!trial && !payment.remind)) continue
             val firstDate = if (trial) payment.trialDeadline(today) else payment.nextCharge(today)?.date
             val target = firstDate?.takeIf { it >= today } ?: continue
             val lead = if (trial) prefs.trialLead else prefs.renewalLead
-            val key = "${payment.id}:$trial:$target"
-            val event = if (key !in sent) target else {
-                if (trial) continue
-                payment.nextCharge(target.plusDays(1))?.date ?: continue
-            }
+            val event = if (trial) {
+                target.takeUnless { "${payment.id}:true:$it" in sent }
+            } else {
+                payment.charges(target, target.plusYears(1))
+                    .firstOrNull { "${payment.id}:false:${it.date}" !in sent }?.date
+            } ?: continue
             val dateTime = event.minusDays(lead.toLong())
                 .atTime(prefs.reminderHour, prefs.reminderMinute).atZone(now.zone)
             if (deliver && dateTime <= now) {
                 notify(payment, event, trial)
                 editor.putString("${payment.id}:$trial:$event", event.toString())
                 if (!trial) {
-                    val following = payment.nextCharge(event.plusDays(1))?.date ?: continue
+                    val following = payment.charges(event.plusDays(1), event.plusYears(1))
+                        .firstOrNull { "${payment.id}:false:${it.date}" !in sent }?.date ?: continue
                     val nextTime = following.minusDays(lead.toLong())
                         .atTime(prefs.reminderHour, prefs.reminderMinute).atZone(now.zone)
                     next = minOf(next ?: Long.MAX_VALUE, nextTime.toInstant().toEpochMilli())
@@ -104,6 +109,9 @@ class Reminders(private val context: Context) {
     }
 
     private fun notify(payment: Payment, event: LocalDate, trial: Boolean) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
         val open = PendingIntent.getActivity(
             context, payment.id.hashCode(),
             Intent(context, MainActivity::class.java)

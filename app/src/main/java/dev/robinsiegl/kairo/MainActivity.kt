@@ -21,10 +21,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -123,10 +123,12 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
     }
 
     fun savePayment(payment: Payment): Boolean {
-        val existing = book.payments.any { it.id == payment.id }
-        val payments = if (existing) book.payments.map { if (it.id == payment.id) payment else it }
+        val previous = book.payments.find { it.id == payment.id }
+        val payments = if (previous != null) book.payments.map { if (it.id == payment.id) payment else it }
         else book.payments + payment
-        return save(book.copy(payments = payments))
+        val saved = save(book.copy(payments = payments))
+        if (saved && previous != null && payment != previous) reminders.dismiss(payment.id)
+        return saved
     }
 
     fun openPayment(id: String) {
@@ -217,7 +219,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
                 }) },
                 navigationIcon = {
                     if (screen.isNotEmpty()) IconButton(onClick = ::back) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -242,7 +244,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
                         onClick = { tab = item },
                         icon = { Icon(when (item) {
                             Tab.Overview -> Icons.Default.Home
-                            Tab.Payments -> Icons.Default.List
+                            Tab.Payments -> Icons.AutoMirrored.Filled.List
                             Tab.Calendar -> Icons.Default.DateRange
                         }, contentDescription = null) },
                         label = { Text(item.label) },
