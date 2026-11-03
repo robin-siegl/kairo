@@ -100,37 +100,19 @@ private fun PaymentRow(payment: Payment, detail: String, amount: String?, open: 
 @Composable
 fun Overview(
     book: Book,
-    month: YearMonth,
     today: LocalDate,
     notificationsOn: Boolean,
-    changeMonth: (YearMonth) -> Unit,
     open: (String) -> Unit,
     enableNotifications: () -> Unit,
 ) {
-    val charges = remember(book.payments, month) {
-        book.payments.flatMap { it.charges(month.atDay(1), month.atEndOfMonth()).toList() }
-    }
-    val trials = book.payments.mapNotNull { payment -> payment.trialDeadline(today)?.let { payment to it } }
-        .sortedBy { it.second }
+    val through = today.plusDays(13)
+    val trials = book.payments.mapNotNull { payment ->
+        payment.trialDeadline(today)?.takeIf { it <= through }?.let { payment to it }
+    }.sortedBy { it.second }
     val upcoming = remember(book.payments, today) {
-        book.payments.mapNotNull { it.nextCharge(today) }.sortedBy { it.date }.take(8)
+        book.payments.flatMap { it.charges(today, through).toList() }.sortedBy { it.date }
     }
     LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 88.dp)) {
-        item { MonthBar(month, changeMonth) }
-        item {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Scheduled this month")
-                    if (charges.isEmpty()) Text(
-                        money(BigDecimal.ZERO, book.preferences.defaultCurrency),
-                        style = MaterialTheme.typography.headlineMedium,
-                    )
-                    charges.groupBy { it.terms.currency }.toSortedMap().forEach { (currency, group) ->
-                        Text(money(group.sumOf { it.amount }, currency), style = MaterialTheme.typography.headlineMedium)
-                    }
-                }
-            }
-        }
         if (trials.isNotEmpty()) {
             item { Section("Needs attention") }
             if (!notificationsOn && book.preferences.trialReminders) item {
@@ -145,27 +127,12 @@ fun Overview(
                 PaymentRow(payment, "$title, ${formatDate(date)}", null, open)
             }
         }
-        item { Section("Upcoming payments") }
+        item { Section("Next 14 days") }
         if (upcoming.isEmpty()) item {
-            Text("Add a recurring payment or free trial to see what’s coming up.", Modifier.padding(vertical = 12.dp))
+            Text("No payments scheduled in the next 14 days.", Modifier.padding(vertical = 12.dp))
         }
         items(upcoming) { charge ->
             PaymentRow(charge.payment, formatDate(charge.date), money(charge.amount, charge.terms.currency), open)
-        }
-        if (charges.isNotEmpty()) {
-            item { Section("By category") }
-            items(charges.groupBy { it.payment.category.ifBlank { "Uncategorized" } }.toSortedMap().toList()) { (name, group) ->
-                ListItem(
-                    headlineContent = { Text(name) },
-                    trailingContent = {
-                        Column(horizontalAlignment = Alignment.End) {
-                            group.groupBy { it.terms.currency }.toSortedMap().forEach { (currency, entries) ->
-                                Text(money(entries.sumOf { it.amount }, currency))
-                            }
-                        }
-                    },
-                )
-            }
         }
     }
 }
@@ -175,7 +142,7 @@ fun Payments(book: Book, today: LocalDate, open: (String) -> Unit) {
     var search by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf("Active") }
     val visible = book.payments.filter { payment ->
-        val matches = listOf(payment.name, payment.category).plus(payment.tags).any { it.contains(search, true) }
+        val matches = listOf(payment.name, payment.category).any { it.contains(search, true) }
         val ended = payment.end?.let { it < today } == true ||
             (payment.current.interval == Interval.Once && payment.current.anchor < today)
         matches && when (filter) {
@@ -187,7 +154,7 @@ fun Payments(book: Book, today: LocalDate, open: (String) -> Unit) {
     LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 88.dp)) {
         item {
             OutlinedTextField(search, { search = it }, Modifier.fillMaxWidth(),
-                label = { Text("Search names, categories, or tags") }, singleLine = true)
+                label = { Text("Search names or categories") }, singleLine = true)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("Active", "Trials", "Ended").forEach { option ->
                     FilterChip(selected = filter == option, onClick = { filter = option }, label = { Text(option) })

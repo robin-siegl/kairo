@@ -138,7 +138,6 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
     var cancelBy by rememberSaveable { mutableStateOf(payment?.cancelBy) }
     var end by rememberSaveable { mutableStateOf(payment?.lastActiveDay) }
     var category by rememberSaveable { mutableStateOf(payment?.category.orEmpty()) }
-    var tags by rememberSaveable { mutableStateOf(payment?.tags.orEmpty().joinToString(", ")) }
     var icon by rememberSaveable { mutableStateOf(payment?.icon ?: "Payment") }
     var image by rememberSaveable { mutableStateOf(payment?.image) }
     var notes by rememberSaveable { mutableStateOf(payment?.notes.orEmpty()) }
@@ -146,6 +145,7 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
     var remind by rememberSaveable { mutableStateOf(payment?.remind ?: false) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var details by rememberSaveable { mutableStateOf(false) }
+    var iconPickerOpen by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -176,12 +176,13 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
             Field("Category", category) { category = it }
             val categories = book.payments.map { it.category }.filter { it.isNotBlank() }.distinct().sorted()
             if (categories.isNotEmpty()) Choice("Use existing category", category, categories, { it }) { category = it }
-            Field("Tags (comma-separated)", tags) { tags = it }
-            Choice("Icon", icon, paymentIcons.keys.toList(), { it }) { icon = it; image = null }
-            TextButton(onClick = { pickImage.launch("image/*") }) {
-                Text(if (image == null) "Choose custom image" else "Replace custom image")
+            OutlinedButton(onClick = { iconPickerOpen = true }) {
+                if (image == null) {
+                    Icon(paymentIcons.getValue(icon.takeIf { it in paymentIcons } ?: "Payment"), null)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(if (image == null) "Icon: $icon" else "Change custom icon")
             }
-            if (image != null) TextButton(onClick = { image = null }) { Text("Remove custom image") }
             Field("Manage or cancel link", link) { link = it }
             Field("Notes", notes) { notes = it }
             DateField("Last active day (optional)", end, today) { end = it }
@@ -212,7 +213,7 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
                     name = name.trim(),
                     terms = terms,
                     category = category.trim(),
-                    tags = tags.split(',').map(String::trim).filter(String::isNotEmpty).distinct(),
+                    tags = payment?.tags.orEmpty(),
                     icon = icon,
                     image = image,
                     notes = notes.trim(),
@@ -226,6 +227,33 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
             }
         }) { Text("Save payment") }
     }
+    if (iconPickerOpen) {
+        AlertDialog(
+            onDismissRequest = { iconPickerOpen = false },
+            title = { Text("Choose an icon") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    paymentIcons.forEach { (label, symbol) ->
+                        TextButton(onClick = {
+                            icon = label
+                            image = null
+                            iconPickerOpen = false
+                        }) {
+                            Icon(symbol, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (image == null && icon == label) "$label (selected)" else label)
+                        }
+                    }
+                    TextButton(onClick = {
+                        iconPickerOpen = false
+                        pickImage.launch("image/*")
+                    }) { Text("Choose custom image") }
+                }
+            },
+            confirmButton = { TextButton(onClick = { iconPickerOpen = false }) { Text("Close") } },
+        )
+    }
+
 }
 
 @Composable
@@ -256,7 +284,6 @@ fun PaymentDetails(
             })
         }
         if (payment.category.isNotBlank()) Text(payment.category)
-        if (payment.tags.isNotEmpty()) Text(payment.tags.joinToString(", "))
         if (payment.notes.isNotBlank()) Text(payment.notes)
         if (isWebLink(payment.manageLink)) OutlinedButton(onClick = { onOpenLink(payment.manageLink) }) {
             Text("Open provider page")

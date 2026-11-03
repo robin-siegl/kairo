@@ -288,8 +288,8 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
                 )
                 else -> when (tab) {
                     Tab.Overview -> Overview(
-                        book, month, today, notificationsOn && trialChannelOn,
-                        editMonth, ::openPayment, ::enableNotifications,
+                        book, today, notificationsOn && trialChannelOn,
+                        ::openPayment, ::enableNotifications,
                     )
                     Tab.Payments -> Payments(book, today, ::openPayment)
                     Tab.Calendar -> Calendar(

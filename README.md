@@ -1,9 +1,9 @@
 # Kairo
 
-Kairo is a local-first Android tracker for recurring payments and free trials. See what is scheduled this month, review upcoming renewals, and remember cancellation deadlines.
+Kairo is a local-first Android tracker for recurring payments and free trials. See upcoming payments, review renewals, and remember cancellation deadlines.
 
-- Add payments manually with a billing schedule, currency, category, tags, and icon.
-- Review scheduled costs by currency and category or browse the month calendar.
+- Add payments manually with a billing schedule, currency, category and icon.
+- See the next 14 days of payments on Overview or browse the month calendar.
 - Set trial reminders and opt in to reminders for individual renewals.
 - Use Android system backup or export and merge a backup file.
 
