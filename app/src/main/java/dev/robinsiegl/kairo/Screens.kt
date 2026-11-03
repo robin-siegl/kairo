@@ -1,8 +1,6 @@
 package dev.robinsiegl.kairo
 
-import android.graphics.BitmapFactory
-import android.util.Base64
-import androidx.compose.foundation.Image
+import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -22,7 +20,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -43,51 +42,72 @@ fun money(amount: BigDecimal, currency: String): String =
     NumberFormat.getCurrencyInstance().apply {
         val unit = Currency.getInstance(currency)
         this.currency = unit
-        maximumFractionDigits = unit.defaultFractionDigits.coerceAtLeast(0)
-        minimumFractionDigits = maximumFractionDigits
+        minimumFractionDigits = unit.defaultFractionDigits.coerceAtLeast(0)
+        maximumFractionDigits = maxOf(minimumFractionDigits, amount.stripTrailingZeros().scale())
     }.format(amount)
-
-internal val paymentIcons = mapOf(
-    "Payment" to Icons.Default.Star,
-    "Home" to Icons.Default.Home,
-    "Health" to Icons.Default.Favorite,
-    "Entertainment" to Icons.Default.PlayArrow,
-    "Work" to Icons.Default.Build,
-    "Shopping" to Icons.Default.ShoppingCart,
-)
 
 @Composable
 internal fun PaymentIcon(payment: Payment) {
-    val image = remember(payment.image) {
-        payment.image?.let {
-            runCatching {
-                val bytes = Base64.decode(it, Base64.DEFAULT)
-                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-                if (bounds.outWidth in 1..96 && bounds.outHeight in 1..96) {
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-                } else null
-            }.getOrNull()
-        }
-    }
-    if (image != null) Image(image, contentDescription = null, modifier = Modifier.size(28.dp))
-    else Icon(paymentIcons[payment.icon] ?: Icons.Default.Star, contentDescription = null)
+    Icon(painterResource(paymentSymbol(payment.icon).drawable), contentDescription = null)
 }
 
 @Composable
-private fun MonthBar(month: YearMonth, change: (YearMonth) -> Unit) {
+private fun PeriodBar(title: String, period: String, previous: () -> Unit, next: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = { change(month.minusMonths(1)) }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Previous month")
+        IconButton(onClick = previous) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Previous $period")
         }
-        Text(
-            month.format(DateTimeFormatter.ofPattern("LLLL yyyy")),
-            modifier = Modifier.weight(1f),
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.titleMedium,
-        )
-        IconButton(onClick = { change(month.plusMonths(1)) }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowForward, "Next month")
+        Text(title, Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
+        IconButton(onClick = next) {
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, "Next $period")
+        }
+    }
+}
+
+@Composable
+private fun ScheduledTotal(label: String, amount: BigDecimal, currency: String) {
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, style = MaterialTheme.typography.labelLarge)
+            Text(money(amount, currency), style = MaterialTheme.typography.headlineSmall)
+        }
+    }
+}
+
+@Composable
+private fun UpcomingChart(upcoming: List<Charge>, today: LocalDate, currency: String) {
+    val midpoint = today.plusDays(7)
+    val first = upcoming.filter { it.date < midpoint }.sumOf { it.amount }
+    val second = upcoming.filter { it.date >= midpoint }.sumOf { it.amount }
+    val maximum = maxOf(first, second)
+    val context = LocalContext.current
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("14-day total", style = MaterialTheme.typography.titleMedium)
+            Text(money(first + second, currency), style = MaterialTheme.typography.headlineSmall)
+            listOf(today to first, midpoint to second).forEach { (start, amount) ->
+                val dates = DateUtils.formatDateRange(
+                    context,
+                    (start.toEpochDay() * 24 + 12) * DateUtils.HOUR_IN_MILLIS,
+                    (start.plusDays(6).toEpochDay() * 24 + 12) * DateUtils.HOUR_IN_MILLIS,
+                    DateUtils.FORMAT_UTC or DateUtils.FORMAT_SHOW_DATE or
+                        DateUtils.FORMAT_ABBREV_MONTH or DateUtils.FORMAT_NO_YEAR,
+                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(dates, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    Text(money(amount, currency), Modifier.weight(1f), textAlign = TextAlign.End,
+                        style = MaterialTheme.typography.labelLarge)
+                }
+                val fraction = if (maximum.signum() == 0) 0f else amount.toFloat() / maximum.toFloat()
+                Box(Modifier.fillMaxWidth().height(8.dp).clip(MaterialTheme.shapes.small)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)) {
+                    Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
+                }
+            }
         }
     }
 }
@@ -214,8 +234,9 @@ fun Overview(
                 }
             }
         }
+        if (upcoming.isNotEmpty()) item { UpcomingChart(upcoming, today, book.preferences.defaultCurrency) }
         items(upcoming) { charge ->
-            PaymentRow(charge.payment, formatDate(charge.date), money(charge.amount, charge.terms.currency), open)
+            PaymentRow(charge.payment, formatDate(charge.date), money(charge.amount, book.preferences.defaultCurrency), open)
         }
     }
 }
@@ -276,7 +297,7 @@ fun Payments(
             PaymentRow(
                 payment,
                 listOf(status, payment.category).filter { it.isNotBlank() }.joinToString(", "),
-                money(payment.current.amount.toBigDecimal(), payment.current.currency),
+                money(payment.current.amount.toBigDecimal(), book.preferences.defaultCurrency),
                 open,
                 quickAction,
                 canCancel = !payment.cancelled && payment.nextCharge(today) != null,
@@ -295,9 +316,15 @@ fun Calendar(
     select: (LocalDate) -> Unit,
     open: (String) -> Unit,
 ) {
-    val charges = remember(book.payments, month) {
-        book.payments.flatMap { it.charges(month.atDay(1), month.atEndOfMonth()).toList() }.groupBy { it.date }
+    var view by rememberSaveable { mutableStateOf("Day") }
+    val currency = book.preferences.defaultCurrency
+    val yearView = view == "Year"
+    val start = if (yearView) month.withMonth(1).atDay(1) else month.atDay(1)
+    val end = if (yearView) start.plusYears(1).minusDays(1) else month.atEndOfMonth()
+    val scheduled = remember(book.payments, start, end) {
+        book.payments.flatMap { it.charges(start, end).toList() }.sortedBy { it.date }
     }
+    val charges = remember(scheduled) { scheduled.groupBy { it.date } }
     val deadlines = book.payments.filter { it.trial && !it.cancelled }.mapNotNull { payment ->
         payment.cancelBy?.let { LocalDate.parse(it) to payment }
     }.groupBy({ it.first }, { it.second })
@@ -305,7 +332,20 @@ fun Calendar(
     val dates = List(firstOffset) { null } + (1..month.lengthOfMonth()).map(month::atDay)
     LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
-            MonthBar(month, changeMonth)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("Day", "Month", "Year").forEach { option ->
+                    FilterChip(view == option, onClick = { view = option }, label = { Text(option) })
+                }
+            }
+            val period = if (yearView) "year" else "month"
+            PeriodBar(
+                if (yearView) month.year.toString() else month.format(DateTimeFormatter.ofPattern("LLLL yyyy")),
+                period,
+                previous = { changeMonth(if (yearView) month.minusYears(1) else month.minusMonths(1)) },
+                next = { changeMonth(if (yearView) month.plusYears(1) else month.plusMonths(1)) },
+            )
+        }
+        if (view == "Day") item {
             Row(Modifier.fillMaxWidth()) {
                 listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun").forEach {
                     Text(it, Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium)
@@ -344,12 +384,40 @@ fun Calendar(
             }
             Section(formatDate(selected))
         }
-        val dayDeadlines = deadlines[selected].orEmpty()
-        val dayCharges = charges[selected].orEmpty()
-        if (dayDeadlines.isEmpty() && dayCharges.isEmpty()) item {
-            Text("Nothing scheduled", Modifier.padding(vertical = 12.dp))
+        when (view) {
+            "Year" -> {
+                item { ScheduledTotal("Scheduled this year", scheduled.sumOf { it.amount }, currency) }
+                val byMonth = scheduled.groupBy { YearMonth.from(it.date) }
+                items((1..12).toList()) { number ->
+                    val entry = month.withMonth(number)
+                    SettingsRow(
+                        entry.format(DateTimeFormatter.ofPattern("LLLL")),
+                        money(byMonth[entry].orEmpty().sumOf { it.amount }, currency),
+                    ) {
+                        changeMonth(entry)
+                        view = "Month"
+                    }
+                }
+            }
+            "Month" -> {
+                item { ScheduledTotal("Scheduled this month", scheduled.sumOf { it.amount }, currency) }
+                val monthDeadlines = deadlines.filterKeys { it in start..end }
+                val activeDays = (charges.keys + monthDeadlines.keys).distinct().sorted()
+                if (activeDays.isEmpty()) item { Text("Nothing scheduled") }
+                activeDays.forEach { day ->
+                    item { Section(formatDate(day)) }
+                    items(monthDeadlines[day].orEmpty()) { PaymentRow(it, "Cancel by", null, open) }
+                    items(charges[day].orEmpty()) { PaymentRow(it.payment, "Payment due", money(it.amount, currency), open) }
+                }
+            }
+            else -> {
+                val dayDeadlines = deadlines[selected].orEmpty()
+                val dayCharges = charges[selected].orEmpty()
+                item { ScheduledTotal("Scheduled this day", dayCharges.sumOf { it.amount }, currency) }
+                if (dayDeadlines.isEmpty() && dayCharges.isEmpty()) item { Text("Nothing scheduled") }
+                items(dayDeadlines) { PaymentRow(it, "Cancel by", null, open) }
+                items(dayCharges) { PaymentRow(it.payment, "Payment due", money(it.amount, currency), open) }
+            }
         }
-        items(dayDeadlines) { PaymentRow(it, "Cancel by", null, open) }
-        items(dayCharges) { PaymentRow(it.payment, "Payment due", money(it.amount, it.terms.currency), open) }
     }
 }

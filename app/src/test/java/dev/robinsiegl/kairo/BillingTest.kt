@@ -58,8 +58,26 @@ class BillingTest {
         assertEquals(0, merge.book.merge(incoming).added)
     }
 
+    @Test
+    fun olderBackupsRetainAmountsAndIconsUnderTheGlobalCurrency() {
+        val oldBackup = """
+            {
+              "preferences": {"defaultCurrency": "JPY"},
+              "payments": [{
+                "id": "example", "name": "Example", "icon": "STAR", "image": "legacy",
+                "terms": [{"firstCharge": "2026-11-01", "amount": "9.999", "currency": "KWD", "interval": "Monthly"}]
+              }]
+            }
+        """.trimIndent()
+        val book = decodeBook(oldBackup)
+        assertEquals("JPY", book.preferences.defaultCurrency)
+        assertEquals("9.999", book.payments.single().current.amount)
+        assertEquals("STAR", book.payments.single().icon)
+        assertEquals(book, decodeBook(encodeBook(book)))
+    }
+
     private fun payment(start: String, interval: Interval) =
-        Payment(name = "Example", terms = listOf(Terms(start, "9.99", "EUR", interval)))
+        Payment(name = "Example", terms = listOf(Terms(start, "9.99", interval)))
 
     private fun dates(payment: Payment, from: String, through: String) =
         payment.charges(LocalDate.parse(from), LocalDate.parse(through)).map { it.date.toString() }.toList()

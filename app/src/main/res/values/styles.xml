@@ -1,4 +1,10 @@
 <resources>
     <string name="app_name">Kairo</string>
-    <style name="Theme.Kairo" parent="android:style/Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Kairo.Base" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/kairo_icon_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">@color/kairo_icon_background</item>
+        <item name="android:navigationBarColor">@color/kairo_icon_background</item>
+    </style>
+    <style name="Theme.Kairo" parent="Theme.Kairo.Base" />
 </resources>

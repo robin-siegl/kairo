@@ -3,13 +3,10 @@ package dev.robinsiegl.kairo
 import android.Manifest
 import android.content.Intent
 import android.content.Context.MODE_PRIVATE
-import android.graphics.Bitmap
-import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -24,6 +21,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -55,16 +53,16 @@ class MainActivity : ComponentActivity() {
         setContent {
             val dark = isSystemInDarkTheme()
             val colors = if (dark) darkColorScheme(
-                primary = Color(0xFFB4C5FF),
-                onPrimary = Color(0xFF192D62),
-                primaryContainer = Color(0xFF304579),
-                onPrimaryContainer = Color(0xFFDAE2FF),
+                primary = Color(0xFFADC6FF),
+                onPrimary = Color(0xFF002E6A),
+                primaryContainer = Color(0xFF16448B),
+                onPrimaryContainer = Color(0xFFD8E5FF),
                 secondaryContainer = Color(0xFF3C4665),
                 onSecondaryContainer = Color(0xFFDDE3FF),
             ) else lightColorScheme(
-                primary = Color(0xFF425A92),
+                primary = Color(0xFF2458A7),
                 onPrimary = Color.White,
-                primaryContainer = Color(0xFFDAE2FF),
+                primaryContainer = Color(0xFFD8E5FF),
                 onPrimaryContainer = Color(0xFF101B37),
                 secondaryContainer = Color(0xFFE1E7F7),
                 onSecondaryContainer = Color(0xFF242F4A),
@@ -263,6 +261,9 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
                     }
                 },
                 actions = {
+                    if (screen == "details" && selected != null) IconButton(onClick = { screen = "edit" }) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit payment")
+                    }
                     if (screen.isEmpty()) IconButton(onClick = { screen = "settings" }) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
@@ -313,8 +314,18 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
                 }
                 "details" -> selected?.let {
                     PaymentDetails(
-                        it, today, onEdit = { screen = "edit" },
+                        it, today, book.preferences.defaultCurrency,
                         onSave = ::savePayment,
+                        onDelete = {
+                            val saved = save(book.copy(payments = book.payments.filterNot { payment -> payment.id == it.id }))
+                            if (saved) {
+                                reminders.dismiss(it.id)
+                                if (categoryOrigin == it.id) categoryOrigin = null
+                                selectedId = null
+                                back()
+                            }
+                            saved
+                        },
                         onCategory = ::openCategory,
                         requestCancellation = quickCancel,
                         consumeCancellation = { quickCancel = false },
@@ -365,21 +376,6 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
             },
             dismissButton = { TextButton(onClick = { pendingImport = null }) { Text("Cancel") } },
         )
-    }
-}
-
-fun loadIcon(context: android.content.Context, uri: Uri): String {
-    val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, info, _ ->
-        val factor = maxOf(info.size.width, info.size.height) / 96.0
-        if (factor > 1) decoder.setTargetSize(
-            (info.size.width / factor).toInt().coerceAtLeast(1),
-            (info.size.height / factor).toInt().coerceAtLeast(1),
-        )
-        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-    }
-    return ByteArrayOutputStream().use {
-        require(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
-        Base64.encodeToString(it.toByteArray(), Base64.NO_WRAP)
     }
 }
 

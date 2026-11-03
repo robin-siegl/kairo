@@ -23,7 +23,6 @@ enum class Interval(val label: String, val days: Long = 0, val months: Long = 0)
 data class Terms(
     val firstCharge: String,
     val amount: String,
-    val currency: String,
     val interval: Interval,
     val effectiveFrom: String = firstCharge,
 ) {
@@ -39,7 +38,6 @@ data class Payment(
     val category: String = "",
     val tags: List<String> = emptyList(),
     val icon: String = "Payment",
-    val image: String? = null,
     val notes: String = "",
     val manageLink: String = "",
     val trial: Boolean = false,
@@ -121,7 +119,9 @@ fun Book.merge(incoming: Book): Merge {
 }
 
 fun parseAmount(input: String, currency: String): BigDecimal? {
-    val value = input.trim().replace(',', '.').toBigDecimalOrNull() ?: return null
     val digits = Currency.getInstance(currency).defaultFractionDigits.coerceAtLeast(0)
-    return value.takeIf { it.signum() >= 0 && it.scale() in 0..digits && it.precision() <= 14 }
+    return parseStoredAmount(input.trim().replace(',', '.'))?.takeIf { it.scale() <= digits }
 }
+
+internal fun parseStoredAmount(input: String): BigDecimal? =
+    input.toBigDecimalOrNull()?.takeIf { it.signum() >= 0 && it.scale() in 0..4 && it.precision() <= 14 }

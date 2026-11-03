@@ -2,7 +2,7 @@
 
 Kairo is a local-first Android tracker for recurring payments and free trials. See upcoming payments, review renewals, and remember cancellation deadlines.
 
-- Add payments manually with a billing schedule, currency, category and icon.
+- Add payments manually with a billing schedule, category and icon. Choose one currency for all payments in Settings.
 - See the next 14 days of payments on Overview or browse the month calendar.
 - Set trial reminders and opt in to reminders for individual renewals.
 - Use Android system backup or export and merge a backup file.

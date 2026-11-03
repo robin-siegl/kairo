@@ -1,15 +1,28 @@
 package dev.robinsiegl.kairo
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -19,7 +32,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import java.net.URI
@@ -30,9 +42,6 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Currency
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 private fun Form(content: @Composable ColumnScope.() -> Unit) {
@@ -45,7 +54,7 @@ private fun Form(content: @Composable ColumnScope.() -> Unit) {
 
 @Composable
 private fun Field(label: String, value: String, change: (String) -> Unit) {
-    OutlinedTextField(value, change, Modifier.fillMaxWidth(), label = { Text(label) })
+    OutlinedTextField(value, change, Modifier.fillMaxWidth(), label = { Text(label) }, singleLine = true)
 }
 
 @Composable
@@ -61,7 +70,7 @@ private fun <T> Choice(label: String, value: T, options: List<T>, text: (T) -> S
     var expanded by remember { mutableStateOf(false) }
     Box {
         if (settingsRow) SettingsRow(label, text(value)) { expanded = true }
-        else FormRow(label, text(value)) { expanded = true }
+        else FormRow(label, text(value), Icons.Default.KeyboardArrowDown) { expanded = true }
         DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
             options.forEach { option ->
                 DropdownMenuItem(text = { Text(text(option)) }, onClick = { change(option); expanded = false })
@@ -74,7 +83,7 @@ private fun <T> Choice(label: String, value: T, options: List<T>, text: (T) -> S
 @Composable
 private fun DateField(label: String, value: String?, today: LocalDate, change: (String) -> Unit) {
     var open by rememberSaveable { mutableStateOf(false) }
-    FormRow(label, value?.let { formatDate(LocalDate.parse(it)) } ?: "Choose date") { open = true }
+    FormRow(label, value?.let { formatDate(LocalDate.parse(it)) } ?: "Choose date", Icons.Default.DateRange) { open = true }
     if (open) {
         val initial = LocalDate.parse(value ?: today.toString()).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()
         val state = rememberDatePickerState(
@@ -97,12 +106,11 @@ private fun DateField(label: String, value: String?, today: LocalDate, change: (
 }
 
 @Composable
-private fun CurrencyPicker(currency: String, settingsRow: Boolean = false, change: (String) -> Unit) {
+private fun CurrencyPicker(currency: String, change: (String) -> Unit) {
     var open by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf("") }
     val showPicker = { search = ""; open = true }
-    if (settingsRow) SettingsRow("Default currency", currency, showPicker)
-    else FormRow("Currency", currency, showPicker)
+    SettingsRow("Currency", currency, showPicker)
     if (open) {
         val currencies = remember {
             Currency.getAvailableCurrencies().filter { it.defaultFractionDigits >= 0 }.sortedBy { it.currencyCode }
@@ -112,7 +120,8 @@ private fun CurrencyPicker(currency: String, settingsRow: Boolean = false, chang
             onDismissRequest = { open = false },
             title = { Text("Choose currency") },
             text = {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Applies to every payment. Existing amounts keep their numeric value.")
                     Field("Search currency", search) { search = it }
                     androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 300.dp)) {
                         items(matches.size) { index ->
@@ -139,7 +148,7 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
     val old = payment?.current
     var name by rememberSaveable { mutableStateOf(payment?.name.orEmpty()) }
     var amount by rememberSaveable { mutableStateOf(old?.amount.orEmpty()) }
-    var currency by rememberSaveable { mutableStateOf(old?.currency ?: book.preferences.defaultCurrency) }
+    val currency = book.preferences.defaultCurrency
     var interval by rememberSaveable { mutableStateOf(old?.interval ?: Interval.Monthly) }
     var start by rememberSaveable { mutableStateOf(old?.firstCharge ?: today.toString()) }
     var trial by rememberSaveable { mutableStateOf(payment?.isTrial(today) == true) }
@@ -147,29 +156,22 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
     var end by rememberSaveable { mutableStateOf(payment?.lastActiveDay) }
     var category by rememberSaveable { mutableStateOf(payment?.category.orEmpty()) }
     var icon by rememberSaveable { mutableStateOf(payment?.icon ?: "Payment") }
-    var image by rememberSaveable { mutableStateOf(payment?.image) }
     var notes by rememberSaveable { mutableStateOf(payment?.notes.orEmpty()) }
     var link by rememberSaveable { mutableStateOf(payment?.manageLink.orEmpty()) }
     var remind by rememberSaveable { mutableStateOf(payment?.remind ?: false) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var details by rememberSaveable { mutableStateOf(false) }
     var iconPickerOpen by rememberSaveable { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) scope.launch {
-            withContext(Dispatchers.IO) { runCatching { loadIcon(context, uri) } }
-                .onSuccess { image = it; error = null }
-                .onFailure { error = "Couldn’t read that image." }
-        }
-    }
+    var iconQuery by rememberSaveable { mutableStateOf("") }
+    var attemptedSave by rememberSaveable { mutableStateOf(false) }
+    val invalidLink = attemptedSave && link.isNotBlank() && !isWebLink(link.trim())
     Form {
         Text("Payment details", style = MaterialTheme.typography.titleMedium)
         Field("Payment name", name) { name = it }
         OutlinedTextField(amount, { amount = it }, Modifier.fillMaxWidth(),
             label = { Text(if (trial) "Price after trial" else "Amount") },
+            trailingIcon = { Text(currency, Modifier.padding(horizontal = 12.dp)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-        CurrencyPicker(currency) { currency = it }
         Text("Schedule", style = MaterialTheme.typography.titleMedium)
         Choice("Repeats", interval, Interval.entries, { it.label }) { interval = it }
         Toggle("Currently on a free trial", trial) { trial = it }
@@ -179,30 +181,59 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
             if (cancelBy != null) TextButton(onClick = { cancelBy = null }) { Text("Clear deadline") }
         }
         Toggle("Remind before regular renewals", remind) { remind = it }
-        FormRow("Optional details", if (details) "Hide fields" else "Category, icon, and notes") { details = !details }
+        FormRow(
+            "Optional details",
+            if (details) "Hide fields" else "Category, icon, and notes",
+            if (details) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+        ) { details = !details }
         if (details) {
             Field("Category", category) { category = it }
             val categories = book.payments.map { it.category }.filter { it.isNotBlank() }.distinct().sorted()
             if (categories.isNotEmpty()) Choice("Use existing category", category, categories, { it }) { category = it }
-            FormRow("Payment icon", if (image == null) icon else "Custom image") { iconPickerOpen = true }
-            Field("Manage or cancel link", link) { link = it }
+            FormRow(
+                "Payment icon",
+                paymentSymbol(icon).label,
+                trailing = { Icon(painterResource(paymentSymbol(icon).drawable), contentDescription = null) },
+            ) {
+                iconQuery = ""
+                iconPickerOpen = true
+            }
+            val linkField = remember { BringIntoViewRequester() }
+            LaunchedEffect(invalidLink) {
+                if (invalidLink) linkField.bringIntoView()
+            }
+            OutlinedTextField(
+                link, { link = it }, Modifier.fillMaxWidth().bringIntoViewRequester(linkField),
+                label = { Text("Manage or cancel link") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                singleLine = true,
+                isError = invalidLink,
+                supportingText = if (invalidLink) {
+                    { Text("Enter a link starting with https:// or http://.") }
+                } else null,
+            )
             Field("Notes", notes) { notes = it }
             DateField("Last active day (optional)", end, today) { end = it }
             if (end != null) TextButton(onClick = { end = null }) { Text("Clear end date") }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Button(modifier = Modifier.fillMaxWidth(), onClick = {
-            val price = parseAmount(amount, currency)
+            attemptedSave = true
+            val price = if (amount == old?.amount) amount.toBigDecimal() else parseAmount(amount, currency)
+            if (link.isNotBlank() && !isWebLink(link.trim())) {
+                details = true
+                error = null
+                return@Button
+            }
             error = when {
                 name.isBlank() -> "Enter a payment name."
                 price == null -> "Enter a valid amount for $currency."
-                link.isNotBlank() && !isWebLink(link.trim()) -> "Enter an http or https link."
                 trial && cancelBy?.let { it > start } == true -> "The cancellation deadline must be on or before the first charge."
                 !trial && end?.let { it < start } == true && payment?.trial != true -> "The end date must be on or after the first charge."
                 else -> null
             }
             if (error == null && price != null) {
-                val newTerms = Terms(start, price.toPlainString(), currency, interval)
+                val newTerms = Terms(start, price.toPlainString(), interval)
                 val terms = when {
                     payment == null || old == null -> listOf(newTerms)
                     old.copy(effectiveFrom = old.firstCharge) == newTerms -> payment.terms
@@ -217,7 +248,6 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
                     category = category.trim(),
                     tags = payment?.tags.orEmpty(),
                     icon = icon,
-                    image = image,
                     notes = notes.trim(),
                     manageLink = link.trim(),
                     trial = trial || preservePastTrial,
@@ -234,27 +264,54 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
             onDismissRequest = { iconPickerOpen = false },
             title = { Text("Choose an icon") },
             text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    paymentIcons.forEach { (label, symbol) ->
-                        val selected = image == null && icon == label
-                        ListItem(
-                            headlineContent = { Text(label) },
-                            leadingContent = { Icon(symbol, contentDescription = null) },
-                            trailingContent = if (selected) {
-                                { Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
-                            } else null,
-                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                            modifier = Modifier.selectable(selected, role = Role.RadioButton) {
-                                icon = label
-                                image = null
-                                iconPickerOpen = false
-                            },
-                        )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        iconQuery, { iconQuery = it }, Modifier.fillMaxWidth(),
+                        label = { Text("Search icons") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        singleLine = true,
+                    )
+                    val matches = remember(iconQuery) {
+                        val words = iconQuery.trim().split(Regex("\\s+")).filter(String::isNotEmpty)
+                        paymentIcons.filter { symbol ->
+                            words.all { "${symbol.label} ${symbol.group} ${symbol.keywords}".contains(it, ignoreCase = true) }
+                        }
                     }
-                    TextButton(onClick = {
-                        iconPickerOpen = false
-                        pickImage.launch("image/*")
-                    }) { Text("Choose custom image") }
+                    val selectedId = paymentSymbol(icon).id
+                    if (matches.isEmpty()) Text("No matching icons")
+                    else LazyVerticalGrid(
+                        columns = GridCells.Adaptive(48.dp),
+                        modifier = Modifier.heightIn(max = 250.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        items(matches, key = { it.id }) { symbol ->
+                            val selected = selectedId == symbol.id
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = if (selected) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surfaceContainerHigh,
+                            ) {
+                                Box(
+                                    Modifier.height(48.dp)
+                                        .selectable(selected, role = Role.RadioButton) {
+                                            icon = symbol.id
+                                            iconPickerOpen = false
+                                        }
+                                        .semantics { contentDescription = symbol.label },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        painterResource(symbol.drawable),
+                                        contentDescription = null,
+                                        tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                 }
             },
             confirmButton = { TextButton(onClick = { iconPickerOpen = false }) { Text("Close") } },
@@ -267,15 +324,17 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
 fun PaymentDetails(
     payment: Payment,
     today: LocalDate,
-    onEdit: () -> Unit,
+    currency: String,
     onSave: (Payment) -> Boolean,
     onOpenLink: (String) -> Unit,
+    onDelete: () -> Boolean,
     onCategory: (String) -> Unit = {},
     requestCancellation: Boolean = false,
     consumeCancellation: () -> Unit = {},
 ) {
     val next = payment.nextCharge(today)
     var cancelling by rememberSaveable { mutableStateOf(false) }
+    var deleting by rememberSaveable { mutableStateOf(false) }
     var end by rememberSaveable { mutableStateOf(today.toString()) }
     fun startCancellation() {
         val charge = next ?: return
@@ -290,7 +349,7 @@ fun PaymentDetails(
     }
     Form {
         PaymentIcon(payment)
-        Text(money(payment.current.amount.toBigDecimal(), payment.current.currency), style = MaterialTheme.typography.headlineMedium)
+        Text(money(payment.current.amount.toBigDecimal(), currency), style = MaterialTheme.typography.headlineMedium)
         Text(payment.current.interval.label)
         if (payment.isTrial(today)) Text("Currently on a free trial")
         payment.trialDeadline(today)?.let {
@@ -308,14 +367,33 @@ fun PaymentDetails(
             onClick = { onCategory(payment.category) }, label = { Text(payment.category) },
         )
         if (payment.notes.isNotBlank()) Text(payment.notes)
-        if (isWebLink(payment.manageLink)) OutlinedButton(onClick = { onOpenLink(payment.manageLink) }) {
-            Text("Open provider page")
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (isWebLink(payment.manageLink)) DetailAction("Open provider page", Icons.AutoMirrored.Filled.ArrowForward) {
+                onOpenLink(payment.manageLink)
+            }
+            if (!payment.cancelled && next != null) {
+                DetailAction("Mark as cancelled", Icons.Default.Close, onClick = ::startCancellation)
+            }
+            if (payment.cancelled) DetailAction("Undo cancellation", Icons.AutoMirrored.Filled.ArrowBack) {
+                onSave(payment.copy(cancelled = false, lastActiveDay = null))
+            }
+            DetailAction("Delete payment", Icons.Default.Delete, destructive = true) { deleting = true }
         }
-        Button(onClick = onEdit) { Text("Edit payment") }
-        if (!payment.cancelled && next != null) OutlinedButton(onClick = ::startCancellation) { Text("Mark as cancelled") }
-        if (payment.cancelled) TextButton(onClick = {
-            onSave(payment.copy(cancelled = false, lastActiveDay = null))
-        }) { Text("Undo cancellation") }
+    }
+    if (deleting) {
+        AlertDialog(
+            onDismissRequest = { deleting = false },
+            icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Delete payment?") },
+            text = { Text("“${payment.name}” and its scheduled charges will be permanently removed from Kairo.") },
+            confirmButton = {
+                TextButton(
+                    onClick = { if (onDelete()) deleting = false },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { deleting = false }) { Text("Keep payment") } },
+        )
     }
     if (cancelling) {
         val lastDay = LocalDate.parse(end)
@@ -326,7 +404,7 @@ fun PaymentDetails(
                 Column {
                     DateField("Last active day", end, today) { end = it }
                     if (next != null && lastDay < next.date) {
-                        Text("The ${money(next.amount, next.terms.currency)} charge on ${formatDate(next.date)} will be removed from your forecast.")
+                        Text("The ${money(next.amount, currency)} charge on ${formatDate(next.date)} will be removed from your forecast.")
                     } else if (next != null) {
                         Text("Charges through ${formatDate(lastDay)} will stay in your forecast.")
                     }
@@ -343,11 +421,37 @@ fun PaymentDetails(
 }
 
 @Composable
-private fun FormRow(title: String, summary: String, click: () -> Unit) {
+private fun DetailAction(label: String, icon: ImageVector, destructive: Boolean = false, onClick: () -> Unit) {
+    FilledTonalButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = if (destructive) ButtonDefaults.filledTonalButtonColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ) else ButtonDefaults.filledTonalButtonColors(),
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+            Text(label)
+        }
+    }
+}
+
+@Composable
+private fun FormRow(title: String, summary: String, symbol: ImageVector, click: () -> Unit) {
+    FormRow(title, summary, trailing = { Icon(symbol, contentDescription = null) }, click = click)
+}
+
+@Composable
+private fun FormRow(title: String, summary: String, trailing: @Composable () -> Unit, click: () -> Unit) {
     ListItem(
         headlineContent = { Text(title) },
         supportingContent = { Text(summary) },
-        trailingContent = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null) },
+        trailingContent = trailing,
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         modifier = Modifier.clip(MaterialTheme.shapes.medium).clickable(role = Role.Button, onClick = click),
     )
@@ -390,7 +494,7 @@ fun PreferencesScreen(
     var pickingTime by rememberSaveable { mutableStateOf(false) }
     Form {
         SettingsGroup("General") {
-            CurrencyPicker(prefs.defaultCurrency, settingsRow = true) { save(prefs.copy(defaultCurrency = it)) }
+            CurrencyPicker(prefs.defaultCurrency) { save(prefs.copy(defaultCurrency = it)) }
         }
         SettingsGroup("Reminders") {
             SettingsRow("Notifications", if (notificationsOn) "Enabled" else "Review notification access", enableNotifications)

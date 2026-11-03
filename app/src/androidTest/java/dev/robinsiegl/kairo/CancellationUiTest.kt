@@ -17,14 +17,14 @@ class CancellationUiTest {
     fun cancellingTrialPrefillsDayBeforeFirstChargeAndRemovesIt() {
         val state = mutableStateOf(Payment(
             name = "Focus Plus",
-            terms = listOf(Terms("2026-11-13", "9.99", "EUR", Interval.Monthly)),
+            terms = listOf(Terms("2026-11-13", "9.99", Interval.Monthly)),
             trial = true,
             cancelBy = "2026-11-11",
         ))
         val today = LocalDate.parse("2026-11-10")
         compose.setContent {
             MaterialTheme {
-                PaymentDetails(state.value, today, {}, { state.value = it; true }, {})
+                PaymentDetails(state.value, today, "EUR", { state.value = it; true }, {}, { false })
             }
         }
         compose.onNodeWithText("Mark as cancelled").performClick()

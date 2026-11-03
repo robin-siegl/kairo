@@ -9,7 +9,7 @@ import java.time.LocalDate
 import java.util.Currency
 import kotlinx.serialization.json.Json
 
-private val json = Json { encodeDefaults = true }
+private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 const val MAX_BACKUP_BYTES = 20 * 1024 * 1024
 
 fun encodeBook(book: Book): String = json.encodeToString(book)
@@ -29,11 +29,10 @@ fun decodeBook(text: String): Book {
         })
         for (terms in payment.terms) {
             require(terms.anchor.year in 1900..9998 && terms.effectiveDate.year in 1900..9998)
-            require(parseAmount(terms.amount, terms.currency) != null)
+            require(parseStoredAmount(terms.amount) != null)
         }
         payment.end
         payment.cancelBy?.let(LocalDate::parse)
-        require(payment.image == null || payment.image.length <= 250_000)
     }
     return book
 }
