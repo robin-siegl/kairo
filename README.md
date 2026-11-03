@@ -7,7 +7,7 @@ Kairo is a local-first Android tracker for recurring payments and free trials. S
 - Set trial reminders and opt in to reminders for individual renewals.
 - Use Android system backup or export and merge a backup file.
 
-Kairo has no accounts, bank connections, or network permission. Provider links open in your browser.
+Kairo has no accounts or bank connections. Production builds contact GitHub when you tap Check for updates. Provider links open in your browser.
 
 ## Build
 

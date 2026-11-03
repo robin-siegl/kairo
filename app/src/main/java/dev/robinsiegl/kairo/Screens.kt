@@ -117,29 +117,7 @@ private fun PaymentRow(
                     Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { PaymentIcon(payment) }
                 }
             },
-            trailingContent = if (quickAction == null) amount?.let { { Text(it) } } else {
-                {
-                    var expanded by remember { mutableStateOf(false) }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        amount?.let { Text(it) }
-                        Box {
-                            IconButton(onClick = { expanded = true }) {
-                                Icon(Icons.Default.MoreVert, "Actions for ${payment.name}")
-                            }
-                            DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-                                DropdownMenuItem(text = { Text("Edit payment") }, onClick = {
-                                    expanded = false
-                                    quickAction(payment.id, false)
-                                })
-                                if (canCancel) DropdownMenuItem(text = { Text("Mark as cancelled") }, onClick = {
-                                    expanded = false
-                                    quickAction(payment.id, true)
-                                })
-                            }
-                        }
-                    }
-                }
-            },
+            trailingContent = amount?.let { { Text(it) } },
             colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
             modifier = Modifier.clip(shape).clickable(role = Role.Button, onClick = { open(payment.id) })
                 .semantics {
@@ -168,11 +146,13 @@ private fun PaymentRow(
             backgroundContent = {
                 val cancel = state.dismissDirection == SwipeToDismissBoxValue.EndToStart
                 Box(
-                    Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 20.dp),
+                    Modifier.fillMaxSize().background(
+                        if (cancel) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+                    ).padding(horizontal = 20.dp),
                     contentAlignment = if (cancel) Alignment.CenterEnd else Alignment.CenterStart,
                 ) {
                     Icon(if (cancel) Icons.Default.Close else Icons.Default.Edit, contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        tint = if (cancel) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer)
                 }
             },
         ) { content() }
@@ -214,7 +194,25 @@ fun Overview(
         }
         item { Section("Next 14 days") }
         if (upcoming.isEmpty()) item {
-            Text("No payments scheduled in the next 14 days.", Modifier.padding(vertical = 12.dp))
+            Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(Icons.Default.DateRange, null, tint = MaterialTheme.colorScheme.primary)
+                    Text(
+                        if (book.payments.isEmpty()) "Welcome to Kairo" else if (trials.isEmpty()) "You’re all clear" else "No payments due",
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    Text(
+                        if (book.payments.isEmpty()) "Add your first payment to see what’s coming up."
+                        else "No payments are due in the next 14 days.",
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
         items(upcoming) { charge ->
             PaymentRow(charge.payment, formatDate(charge.date), money(charge.amount, charge.terms.currency), open)

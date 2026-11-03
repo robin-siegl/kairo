@@ -55,19 +55,19 @@ class MainActivity : ComponentActivity() {
         setContent {
             val dark = isSystemInDarkTheme()
             val colors = if (dark) darkColorScheme(
-                primary = Color(0xFF82D7C2),
-                onPrimary = Color(0xFF00382E),
-                primaryContainer = Color(0xFF005145),
-                onPrimaryContainer = Color(0xFFA0F4DF),
-                secondaryContainer = Color(0xFF284C43),
-                onSecondaryContainer = Color(0xFFC7EFE2),
+                primary = Color(0xFFB4C5FF),
+                onPrimary = Color(0xFF192D62),
+                primaryContainer = Color(0xFF304579),
+                onPrimaryContainer = Color(0xFFDAE2FF),
+                secondaryContainer = Color(0xFF3C4665),
+                onSecondaryContainer = Color(0xFFDDE3FF),
             ) else lightColorScheme(
-                primary = Color(0xFF006B59),
+                primary = Color(0xFF425A92),
                 onPrimary = Color.White,
-                primaryContainer = Color(0xFFA0F4DF),
-                onPrimaryContainer = Color(0xFF002019),
-                secondaryContainer = Color(0xFFD2EEE5),
-                onSecondaryContainer = Color(0xFF153D33),
+                primaryContainer = Color(0xFFDAE2FF),
+                onPrimaryContainer = Color(0xFF101B37),
+                secondaryContainer = Color(0xFFE1E7F7),
+                onSecondaryContainer = Color(0xFF242F4A),
             )
             MaterialTheme(colorScheme = colors) {
                 if (initial.isSuccess) {

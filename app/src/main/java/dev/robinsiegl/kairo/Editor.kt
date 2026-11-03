@@ -1,10 +1,15 @@
 package dev.robinsiegl.kairo
 
-import android.app.TimePickerDialog
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -56,7 +61,7 @@ private fun <T> Choice(label: String, value: T, options: List<T>, text: (T) -> S
     var expanded by remember { mutableStateOf(false) }
     Box {
         if (settingsRow) SettingsRow(label, text(value)) { expanded = true }
-        else OutlinedButton(onClick = { expanded = true }) { Text("$label: ${text(value)}") }
+        else FormRow(label, text(value)) { expanded = true }
         DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
             options.forEach { option ->
                 DropdownMenuItem(text = { Text(text(option)) }, onClick = { change(option); expanded = false })
@@ -69,9 +74,7 @@ private fun <T> Choice(label: String, value: T, options: List<T>, text: (T) -> S
 @Composable
 private fun DateField(label: String, value: String?, today: LocalDate, change: (String) -> Unit) {
     var open by rememberSaveable { mutableStateOf(false) }
-    OutlinedButton(onClick = { open = true }) {
-        Text("$label: ${value?.let { formatDate(LocalDate.parse(it)) } ?: "Choose date"}")
-    }
+    FormRow(label, value?.let { formatDate(LocalDate.parse(it)) } ?: "Choose date") { open = true }
     if (open) {
         val initial = LocalDate.parse(value ?: today.toString()).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()
         val state = rememberDatePickerState(
@@ -99,7 +102,7 @@ private fun CurrencyPicker(currency: String, settingsRow: Boolean = false, chang
     var search by rememberSaveable { mutableStateOf("") }
     val showPicker = { search = ""; open = true }
     if (settingsRow) SettingsRow("Default currency", currency, showPicker)
-    else OutlinedButton(onClick = showPicker) { Text("Currency: $currency") }
+    else FormRow("Currency", currency, showPicker)
     if (open) {
         val currencies = remember {
             Currency.getAvailableCurrencies().filter { it.defaultFractionDigits >= 0 }.sortedBy { it.currencyCode }
@@ -161,11 +164,13 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
         }
     }
     Form {
+        Text("Payment details", style = MaterialTheme.typography.titleMedium)
         Field("Payment name", name) { name = it }
         OutlinedTextField(amount, { amount = it }, Modifier.fillMaxWidth(),
             label = { Text(if (trial) "Price after trial" else "Amount") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
         CurrencyPicker(currency) { currency = it }
+        Text("Schedule", style = MaterialTheme.typography.titleMedium)
         Choice("Repeats", interval, Interval.entries, { it.label }) { interval = it }
         Toggle("Currently on a free trial", trial) { trial = it }
         DateField(if (trial) "First paid charge" else "First charge", start, today) { start = it }
@@ -174,27 +179,19 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
             if (cancelBy != null) TextButton(onClick = { cancelBy = null }) { Text("Clear deadline") }
         }
         Toggle("Remind before regular renewals", remind) { remind = it }
-        TextButton(onClick = { details = !details }) {
-            Text(if (details) "Hide optional details" else "Category, icon, and more")
-        }
+        FormRow("Optional details", if (details) "Hide fields" else "Category, icon, and notes") { details = !details }
         if (details) {
             Field("Category", category) { category = it }
             val categories = book.payments.map { it.category }.filter { it.isNotBlank() }.distinct().sorted()
             if (categories.isNotEmpty()) Choice("Use existing category", category, categories, { it }) { category = it }
-            OutlinedButton(onClick = { iconPickerOpen = true }) {
-                if (image == null) {
-                    Icon(paymentIcons.getValue(icon.takeIf { it in paymentIcons } ?: "Payment"), null)
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(if (image == null) "Icon: $icon" else "Change custom icon")
-            }
+            FormRow("Payment icon", if (image == null) icon else "Custom image") { iconPickerOpen = true }
             Field("Manage or cancel link", link) { link = it }
             Field("Notes", notes) { notes = it }
             DateField("Last active day (optional)", end, today) { end = it }
             if (end != null) TextButton(onClick = { end = null }) { Text("Clear end date") }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        Button(onClick = {
+        Button(modifier = Modifier.fillMaxWidth(), onClick = {
             val price = parseAmount(amount, currency)
             error = when {
                 name.isBlank() -> "Enter a payment name."
@@ -239,15 +236,20 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     paymentIcons.forEach { (label, symbol) ->
-                        TextButton(onClick = {
-                            icon = label
-                            image = null
-                            iconPickerOpen = false
-                        }) {
-                            Icon(symbol, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(if (image == null && icon == label) "$label (selected)" else label)
-                        }
+                        val selected = image == null && icon == label
+                        ListItem(
+                            headlineContent = { Text(label) },
+                            leadingContent = { Icon(symbol, contentDescription = null) },
+                            trailingContent = if (selected) {
+                                { Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                            } else null,
+                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                            modifier = Modifier.selectable(selected, role = Role.RadioButton) {
+                                icon = label
+                                image = null
+                                iconPickerOpen = false
+                            },
+                        )
                     }
                     TextButton(onClick = {
                         iconPickerOpen = false
@@ -341,7 +343,18 @@ fun PaymentDetails(
 }
 
 @Composable
-private fun SettingsRow(title: String, summary: String? = null, click: () -> Unit) {
+private fun FormRow(title: String, summary: String, click: () -> Unit) {
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = { Text(summary) },
+        trailingContent = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null) },
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        modifier = Modifier.clip(MaterialTheme.shapes.medium).clickable(role = Role.Button, onClick = click),
+    )
+}
+
+@Composable
+internal fun SettingsRow(title: String, summary: String? = null, click: () -> Unit) {
     ListItem(
         headlineContent = { Text(title) },
         supportingContent = summary?.let { { Text(it) } },
@@ -374,7 +387,7 @@ fun PreferencesScreen(
     export: () -> Unit,
     import: () -> Unit,
 ) {
-    val context = LocalContext.current
+    var pickingTime by rememberSaveable { mutableStateOf(false) }
     Form {
         SettingsGroup("General") {
             CurrencyPicker(prefs.defaultCurrency, settingsRow = true) { save(prefs.copy(defaultCurrency = it)) }
@@ -401,15 +414,54 @@ fun PreferencesScreen(
             }
             val time = LocalTime.of(prefs.reminderHour, prefs.reminderMinute)
                 .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
-            SettingsRow("Reminder time", time) {
-                TimePickerDialog(context, { _, hour, minute ->
-                    save(prefs.copy(reminderHour = hour, reminderMinute = minute))
-                }, prefs.reminderHour, prefs.reminderMinute, android.text.format.DateFormat.is24HourFormat(context)).show()
-            }
+            SettingsRow("Reminder time", time) { pickingTime = true }
         }
         SettingsGroup("Backup") {
             SettingsRow("Export backup", "Save a copy of your payments and settings", export)
             SettingsRow("Merge from backup", "Add payments from a Kairo backup", import)
+        }
+        SettingsGroup("About") {
+            ListItem(
+                headlineContent = { Text("App version") },
+                supportingContent = { Text(BuildConfig.VERSION_NAME) },
+                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            )
+            if (!BuildConfig.DEBUG) AppUpdates()
+        }
+    }
+    if (pickingTime) {
+        ReminderTimeDialog(prefs, dismiss = { pickingTime = false }) { hour, minute ->
+            save(prefs.copy(reminderHour = hour, reminderMinute = minute))
+            pickingTime = false
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReminderTimeDialog(prefs: Preferences, dismiss: () -> Unit, save: (Int, Int) -> Unit) {
+    val state = rememberTimePickerState(initialHour = prefs.reminderHour, initialMinute = prefs.reminderMinute)
+    var useKeyboard by rememberSaveable { mutableStateOf(false) }
+    Dialog(onDismissRequest = dismiss) {
+        Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()).padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("Reminder time", style = MaterialTheme.typography.titleLarge)
+                BoxWithConstraints {
+                    if (useKeyboard || maxWidth < 256.dp || maxHeight < 380.dp) TimeInput(state)
+                    else TimePicker(state, layoutType = TimePickerLayoutType.Vertical)
+                }
+                TextButton(onClick = { useKeyboard = !useKeyboard }) {
+                    Text(if (useKeyboard) "Use clock" else "Type time")
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = dismiss) { Text("Cancel") }
+                    TextButton(onClick = { save(state.hour, state.minute) }) { Text("Save") }
+                }
+            }
         }
     }
 }

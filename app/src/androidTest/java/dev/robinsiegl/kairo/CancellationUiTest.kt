@@ -28,7 +28,7 @@ class CancellationUiTest {
             }
         }
         compose.onNodeWithText("Mark as cancelled").performClick()
-        compose.onNodeWithText("Last active day: ${formatDate(today.plusDays(2))}").assertIsDisplayed()
+        compose.onNodeWithText("${formatDate(today.plusDays(2))}").assertIsDisplayed()
         compose.onNodeWithText("Save cancellation").performClick()
         compose.onNodeWithText("Next charge", substring = true).assertDoesNotExist()
         compose.onNodeWithText("Cancelled. Ends ${formatDate(today.plusDays(2))}").assertIsDisplayed()
