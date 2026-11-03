@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Kairo</string>
+    <style name="Theme.Kairo" parent="android:style/Theme.Material.Light.NoActionBar" />
+</resources>
