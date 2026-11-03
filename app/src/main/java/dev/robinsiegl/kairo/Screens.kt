@@ -3,6 +3,13 @@ package dev.robinsiegl.kairo
 import android.graphics.BitmapFactory
 import android.util.Base64
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -70,14 +77,18 @@ internal fun PaymentIcon(payment: Payment) {
 @Composable
 private fun MonthBar(month: YearMonth, change: (YearMonth) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = { change(month.minusMonths(1)) }) { Text("Previous") }
+        IconButton(onClick = { change(month.minusMonths(1)) }) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Previous month")
+        }
         Text(
             month.format(DateTimeFormatter.ofPattern("LLLL yyyy")),
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.titleMedium,
         )
-        TextButton(onClick = { change(month.plusMonths(1)) }) { Text("Next") }
+        IconButton(onClick = { change(month.plusMonths(1)) }) {
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, "Next month")
+        }
     }
 }
 
@@ -86,15 +97,86 @@ private fun Section(title: String) {
     Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PaymentRow(payment: Payment, detail: String, amount: String?, open: (String) -> Unit) {
-    ListItem(
-        headlineContent = { Text(payment.name) },
-        supportingContent = { Text(detail) },
-        leadingContent = { PaymentIcon(payment) },
-        trailingContent = amount?.let { { Text(it) } },
-        modifier = Modifier.clickable(role = Role.Button, onClick = { open(payment.id) }),
-    )
+private fun PaymentRow(
+    payment: Payment,
+    detail: String,
+    amount: String?,
+    open: (String) -> Unit,
+    quickAction: ((String, Boolean) -> Unit)? = null,
+    canCancel: Boolean = false,
+) {
+    val shape = MaterialTheme.shapes.large
+    val content: @Composable () -> Unit = {
+        ListItem(
+            headlineContent = { Text(payment.name) },
+            supportingContent = { Text(detail) },
+            leadingContent = {
+                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primaryContainer) {
+                    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { PaymentIcon(payment) }
+                }
+            },
+            trailingContent = if (quickAction == null) amount?.let { { Text(it) } } else {
+                {
+                    var expanded by remember { mutableStateOf(false) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        amount?.let { Text(it) }
+                        Box {
+                            IconButton(onClick = { expanded = true }) {
+                                Icon(Icons.Default.MoreVert, "Actions for ${payment.name}")
+                            }
+                            DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
+                                DropdownMenuItem(text = { Text("Edit payment") }, onClick = {
+                                    expanded = false
+                                    quickAction(payment.id, false)
+                                })
+                                if (canCancel) DropdownMenuItem(text = { Text("Mark as cancelled") }, onClick = {
+                                    expanded = false
+                                    quickAction(payment.id, true)
+                                })
+                            }
+                        }
+                    }
+                }
+            },
+            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            modifier = Modifier.clip(shape).clickable(role = Role.Button, onClick = { open(payment.id) })
+                .semantics {
+                    if (quickAction != null) customActions = buildList {
+                        add(CustomAccessibilityAction("Edit payment") { quickAction(payment.id, false); true })
+                        if (canCancel) add(CustomAccessibilityAction("Mark as cancelled") { quickAction(payment.id, true); true })
+                    }
+                },
+        )
+    }
+    if (quickAction == null) {
+        content()
+    } else {
+        val state = rememberSwipeToDismissBoxState()
+        val scope = rememberCoroutineScope()
+        SwipeToDismissBox(
+            state = state,
+            modifier = Modifier.clip(shape),
+            enableDismissFromEndToStart = canCancel,
+            onDismiss = { direction ->
+                scope.launch { state.reset() }
+                if (direction != SwipeToDismissBoxValue.Settled) {
+                    quickAction(payment.id, direction == SwipeToDismissBoxValue.EndToStart)
+                }
+            },
+            backgroundContent = {
+                val cancel = state.dismissDirection == SwipeToDismissBoxValue.EndToStart
+                Box(
+                    Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 20.dp),
+                    contentAlignment = if (cancel) Alignment.CenterEnd else Alignment.CenterStart,
+                ) {
+                    Icon(if (cancel) Icons.Default.Close else Icons.Default.Edit, contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            },
+        ) { content() }
+    }
 }
 
 @Composable
@@ -112,7 +194,10 @@ fun Overview(
     val upcoming = remember(book.payments, today) {
         book.payments.flatMap { it.charges(today, through).toList() }.sortedBy { it.date }
     }
-    LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 88.dp)) {
+    LazyColumn(
+        contentPadding = PaddingValues(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         if (trials.isNotEmpty()) {
             item { Section("Needs attention") }
             if (!notificationsOn && book.preferences.trialReminders) item {
@@ -138,26 +223,47 @@ fun Overview(
 }
 
 @Composable
-fun Payments(book: Book, today: LocalDate, open: (String) -> Unit) {
+fun Payments(
+    book: Book,
+    today: LocalDate,
+    open: (String) -> Unit,
+    openCategory: (String) -> Unit,
+    quickAction: (String, Boolean) -> Unit,
+    category: String? = null,
+) {
     var search by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf("Active") }
     val visible = book.payments.filter { payment ->
         val matches = listOf(payment.name, payment.category).any { it.contains(search, true) }
         val ended = payment.end?.let { it < today } == true ||
             (payment.current.interval == Interval.Once && payment.current.anchor < today)
-        matches && when (filter) {
+        if (category != null) payment.category == category else matches && when (filter) {
             "Trials" -> payment.isTrial(today)
             "Ended" -> ended
             else -> !ended
         }
     }.sortedBy { it.name.lowercase() }
-    LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 88.dp)) {
-        item {
+    LazyColumn(
+        contentPadding = PaddingValues(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (category == null) item {
             OutlinedTextField(search, { search = it }, Modifier.fillMaxWidth(),
                 label = { Text("Search names or categories") }, singleLine = true)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("Active", "Trials", "Ended").forEach { option ->
                     FilterChip(selected = filter == option, onClick = { filter = option }, label = { Text(option) })
+                }
+            }
+        }
+        if (category == null && search.isBlank()) {
+            val categories = book.payments.map { it.category }.filter { it.isNotBlank() }.distinct().sorted()
+            if (categories.isNotEmpty()) item {
+                Section("Categories")
+                androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(categories) { name ->
+                        AssistChip(onClick = { openCategory(name) }, label = { Text(name) })
+                    }
                 }
             }
         }
@@ -174,6 +280,8 @@ fun Payments(book: Book, today: LocalDate, open: (String) -> Unit) {
                 listOf(status, payment.category).filter { it.isNotBlank() }.joinToString(", "),
                 money(payment.current.amount.toBigDecimal(), payment.current.currency),
                 open,
+                quickAction,
+                canCancel = !payment.cancelled && payment.nextCharge(today) != null,
             )
         }
     }
@@ -197,7 +305,7 @@ fun Calendar(
     }.groupBy({ it.first }, { it.second })
     val firstOffset = month.atDay(1).dayOfWeek.value - 1
     val dates = List(firstOffset) { null } + (1..month.lengthOfMonth()).map(month::atDay)
-    LazyColumn(contentPadding = PaddingValues(16.dp)) {
+    LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             MonthBar(month, changeMonth)
             Row(Modifier.fillMaxWidth()) {

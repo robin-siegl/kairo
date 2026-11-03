@@ -30,6 +30,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -53,12 +54,21 @@ class MainActivity : ComponentActivity() {
         val initial = runCatching(storage::read)
         setContent {
             val dark = isSystemInDarkTheme()
-            val colors = when {
-                Build.VERSION.SDK_INT >= 31 && dark -> dynamicDarkColorScheme(this)
-                Build.VERSION.SDK_INT >= 31 -> dynamicLightColorScheme(this)
-                dark -> darkColorScheme()
-                else -> lightColorScheme()
-            }
+            val colors = if (dark) darkColorScheme(
+                primary = Color(0xFF82D7C2),
+                onPrimary = Color(0xFF00382E),
+                primaryContainer = Color(0xFF005145),
+                onPrimaryContainer = Color(0xFFA0F4DF),
+                secondaryContainer = Color(0xFF284C43),
+                onSecondaryContainer = Color(0xFFC7EFE2),
+            ) else lightColorScheme(
+                primary = Color(0xFF006B59),
+                onPrimary = Color.White,
+                primaryContainer = Color(0xFFA0F4DF),
+                onPrimaryContainer = Color(0xFF002019),
+                secondaryContainer = Color(0xFFD2EEE5),
+                onSecondaryContainer = Color(0xFF153D33),
+            )
             MaterialTheme(colorScheme = colors) {
                 if (initial.isSuccess) {
                     Kairo(storage, initial.getOrThrow(), openedPayment) { openedPayment = null }
@@ -97,6 +107,10 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
     var monthText by rememberSaveable { mutableStateOf(YearMonth.from(today).toString()) }
     var selectedDayText by rememberSaveable { mutableStateOf(today.toString()) }
     var screen by rememberSaveable { mutableStateOf("") }
+    var category by rememberSaveable { mutableStateOf<String?>(null) }
+    var categoryOrigin by rememberSaveable { mutableStateOf<String?>(null) }
+    var detailParent by rememberSaveable { mutableStateOf("") }
+    var quickCancel by rememberSaveable { mutableStateOf(false) }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingImport by remember { mutableStateOf<Book?>(null) }
     val selected = book.payments.find { it.id == selectedId }
@@ -132,12 +146,37 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
     }
 
     fun openPayment(id: String) {
+        if (screen != "edit") detailParent = if (screen == "category") "category" else ""
+        quickCancel = false
         selectedId = id
         screen = "details"
     }
 
+    fun openCategory(name: String) {
+        if (screen != "details" || detailParent != "category") {
+            categoryOrigin = selectedId.takeIf { screen == "details" }
+        }
+        category = name
+        screen = "category"
+    }
+
+    fun quickAction(id: String, cancel: Boolean) {
+        openPayment(id)
+        if (cancel) quickCancel = true else screen = "edit"
+    }
+
     fun back() {
-        screen = if (screen == "edit" && selected != null) "details" else ""
+        screen = when {
+            screen == "edit" && selected != null -> "details"
+            screen == "details" -> detailParent
+            screen == "category" && categoryOrigin != null -> {
+                selectedId = categoryOrigin
+                categoryOrigin = null
+                detailParent = ""
+                "details"
+            }
+            else -> ""
+        }
     }
 
     LaunchedEffect(openedPayment) {
@@ -215,6 +254,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
                     "details" -> selected?.name ?: "Payment"
                     "edit" -> if (selected == null) "Add payment" else "Edit payment"
                     "settings" -> "Settings"
+                    "category" -> category.orEmpty()
                     else -> tab.label
                 }) },
                 navigationIcon = {
@@ -275,11 +315,17 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
                     PaymentDetails(
                         it, today, onEdit = { screen = "edit" },
                         onSave = ::savePayment,
+                        onCategory = ::openCategory,
+                        requestCancellation = quickCancel,
+                        consumeCancellation = { quickCancel = false },
                         onOpenLink = { url ->
                             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
                                 .onFailure { scope.launch { snackbar.showSnackbar("Couldn’t open this link.") } }
                         },
                     )
+                }
+                "category" -> category?.let {
+                    Payments(book, today, ::openPayment, ::openCategory, ::quickAction, category = it)
                 }
                 "settings" -> PreferencesScreen(
                     book.preferences, notificationsOn && trialChannelOn && renewalChannelOn,
@@ -291,7 +337,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
                         book, today, notificationsOn && trialChannelOn,
                         ::openPayment, ::enableNotifications,
                     )
-                    Tab.Payments -> Payments(book, today, ::openPayment)
+                    Tab.Payments -> Payments(book, today, ::openPayment, ::openCategory, ::quickAction)
                     Tab.Calendar -> Calendar(
                         book, month, LocalDate.parse(selectedDayText), today,
                         editMonth, { selectedDayText = it.toString() }, ::openPayment,

@@ -4,6 +4,8 @@ import android.app.TimePickerDialog
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -30,8 +32,8 @@ import kotlinx.coroutines.withContext
 @Composable
 private fun Form(content: @Composable ColumnScope.() -> Unit) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
         content = content,
     )
 }
@@ -50,10 +52,11 @@ private fun Toggle(label: String, checked: Boolean, change: (Boolean) -> Unit) {
 }
 
 @Composable
-private fun <T> Choice(label: String, value: T, options: List<T>, text: (T) -> String, change: (T) -> Unit) {
+private fun <T> Choice(label: String, value: T, options: List<T>, text: (T) -> String, settingsRow: Boolean = false, change: (T) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick = { expanded = true }) { Text("$label: ${text(value)}") }
+        if (settingsRow) SettingsRow(label, text(value)) { expanded = true }
+        else OutlinedButton(onClick = { expanded = true }) { Text("$label: ${text(value)}") }
         DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
             options.forEach { option ->
                 DropdownMenuItem(text = { Text(text(option)) }, onClick = { change(option); expanded = false })
@@ -91,10 +94,12 @@ private fun DateField(label: String, value: String?, today: LocalDate, change: (
 }
 
 @Composable
-private fun CurrencyPicker(currency: String, change: (String) -> Unit) {
+private fun CurrencyPicker(currency: String, settingsRow: Boolean = false, change: (String) -> Unit) {
     var open by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf("") }
-    OutlinedButton(onClick = { search = ""; open = true }) { Text("Currency: $currency") }
+    val showPicker = { search = ""; open = true }
+    if (settingsRow) SettingsRow("Default currency", currency, showPicker)
+    else OutlinedButton(onClick = showPicker) { Text("Currency: $currency") }
     if (open) {
         val currencies = remember {
             Currency.getAvailableCurrencies().filter { it.defaultFractionDigits >= 0 }.sortedBy { it.currencyCode }
@@ -263,10 +268,24 @@ fun PaymentDetails(
     onEdit: () -> Unit,
     onSave: (Payment) -> Boolean,
     onOpenLink: (String) -> Unit,
+    onCategory: (String) -> Unit = {},
+    requestCancellation: Boolean = false,
+    consumeCancellation: () -> Unit = {},
 ) {
     val next = payment.nextCharge(today)
     var cancelling by rememberSaveable { mutableStateOf(false) }
     var end by rememberSaveable { mutableStateOf(today.toString()) }
+    fun startCancellation() {
+        val charge = next ?: return
+        end = charge.date.minusDays(1).toString()
+        cancelling = true
+    }
+    LaunchedEffect(requestCancellation) {
+        if (requestCancellation) {
+            startCancellation()
+            consumeCancellation()
+        }
+    }
     Form {
         PaymentIcon(payment)
         Text(money(payment.current.amount.toBigDecimal(), payment.current.currency), style = MaterialTheme.typography.headlineMedium)
@@ -283,16 +302,15 @@ fun PaymentDetails(
                 else -> "Ends ${formatDate(it)}"
             })
         }
-        if (payment.category.isNotBlank()) Text(payment.category)
+        if (payment.category.isNotBlank()) AssistChip(
+            onClick = { onCategory(payment.category) }, label = { Text(payment.category) },
+        )
         if (payment.notes.isNotBlank()) Text(payment.notes)
         if (isWebLink(payment.manageLink)) OutlinedButton(onClick = { onOpenLink(payment.manageLink) }) {
             Text("Open provider page")
         }
         Button(onClick = onEdit) { Text("Edit payment") }
-        if (!payment.cancelled && next != null) OutlinedButton(onClick = {
-            end = next.date.minusDays(1).toString()
-            cancelling = true
-        }) { Text("Mark as cancelled") }
+        if (!payment.cancelled && next != null) OutlinedButton(onClick = ::startCancellation) { Text("Mark as cancelled") }
         if (payment.cancelled) TextButton(onClick = {
             onSave(payment.copy(cancelled = false, lastActiveDay = null))
         }) { Text("Undo cancellation") }
@@ -323,6 +341,31 @@ fun PaymentDetails(
 }
 
 @Composable
+private fun SettingsRow(title: String, summary: String? = null, click: () -> Unit) {
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = summary?.let { { Text(it) } },
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        modifier = Modifier.clip(MaterialTheme.shapes.small).clickable(onClick = click),
+    )
+}
+
+@Composable
+private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            title,
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
+        )
+        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
+        }
+    }
+}
+
+@Composable
 fun PreferencesScreen(
     prefs: Preferences,
     notificationsOn: Boolean,
@@ -333,27 +376,41 @@ fun PreferencesScreen(
 ) {
     val context = LocalContext.current
     Form {
-        CurrencyPicker(prefs.defaultCurrency) { save(prefs.copy(defaultCurrency = it)) }
-        Text("Reminders", style = MaterialTheme.typography.titleLarge)
-        if (!notificationsOn) TextButton(onClick = enableNotifications) { Text("Manage notification access") }
-        Choice("Renewal lead time", prefs.renewalLead, (1..7).toList(), ::dayLabel) {
-            save(prefs.copy(renewalLead = it))
+        SettingsGroup("General") {
+            CurrencyPicker(prefs.defaultCurrency, settingsRow = true) { save(prefs.copy(defaultCurrency = it)) }
         }
-        Toggle("Remind me about trials", prefs.trialReminders) { save(prefs.copy(trialReminders = it)) }
-        Choice("Trial lead time", prefs.trialLead, (1..7).toList(), ::dayLabel) {
-            save(prefs.copy(trialLead = it))
+        SettingsGroup("Reminders") {
+            SettingsRow("Notifications", if (notificationsOn) "Enabled" else "Review notification access", enableNotifications)
+            Choice("Renewal lead time", prefs.renewalLead, (1..7).toList(), ::dayLabel, settingsRow = true) {
+                save(prefs.copy(renewalLead = it))
+            }
+            ListItem(
+                headlineContent = { Text("Remind me about trials") },
+                trailingContent = {
+                    Switch(
+                        checked = prefs.trialReminders,
+                        onCheckedChange = { save(prefs.copy(trialReminders = it)) },
+                    )
+                },
+                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            )
+            if (prefs.trialReminders) {
+                Choice("Trial lead time", prefs.trialLead, (1..7).toList(), ::dayLabel, settingsRow = true) {
+                    save(prefs.copy(trialLead = it))
+                }
+            }
+            val time = LocalTime.of(prefs.reminderHour, prefs.reminderMinute)
+                .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
+            SettingsRow("Reminder time", time) {
+                TimePickerDialog(context, { _, hour, minute ->
+                    save(prefs.copy(reminderHour = hour, reminderMinute = minute))
+                }, prefs.reminderHour, prefs.reminderMinute, android.text.format.DateFormat.is24HourFormat(context)).show()
+            }
         }
-        val time = LocalTime.of(prefs.reminderHour, prefs.reminderMinute)
-            .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
-        OutlinedButton(onClick = {
-            TimePickerDialog(context, { _, hour, minute ->
-                save(prefs.copy(reminderHour = hour, reminderMinute = minute))
-            }, prefs.reminderHour, prefs.reminderMinute, android.text.format.DateFormat.is24HourFormat(context)).show()
-        }) { Text("Reminder time: $time") }
-        HorizontalDivider()
-        Text("Your data", style = MaterialTheme.typography.titleLarge)
-        OutlinedButton(onClick = export) { Text("Export backup") }
-        OutlinedButton(onClick = import) { Text("Merge from backup") }
+        SettingsGroup("Backup") {
+            SettingsRow("Export backup", "Save a copy of your payments and settings", export)
+            SettingsRow("Merge from backup", "Add payments from a Kairo backup", import)
+        }
     }
 }
 
