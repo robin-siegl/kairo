@@ -1,0 +1,6 @@
+<resources>
+    <color name="widget_brand_background">#E7EEFF</color>
+    <color name="widget_brand_foreground">#14254A</color>
+    <color name="widget_wallpaper_background">#E7EEFF</color>
+    <color name="widget_wallpaper_foreground">#14254A</color>
+</resources>

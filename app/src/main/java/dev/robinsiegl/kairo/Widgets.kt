@@ -6,8 +6,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
-import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -115,18 +113,13 @@ internal object WidgetUpdates {
 
     internal fun createViews(context: Context, manager: AppWidgetManager, id: Int, kind: WidgetKind, book: Book?): RemoteViews {
         val options = widgetOptions(context, id)
-        val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        val background = if (options.wallpaper && Build.VERSION.SDK_INT >= 31) {
-            context.getColor(if (dark) android.R.color.system_accent1_800 else android.R.color.system_accent1_100)
-        } else Color.parseColor(if (dark) "#152B58" else "#E7EEFF")
-        val foreground = if (options.wallpaper && Build.VERSION.SDK_INT >= 31) {
-            context.getColor(if (dark) android.R.color.system_accent1_50 else android.R.color.system_accent1_900)
-        } else Color.parseColor(if (dark) "#FFFFFF" else "#14254A")
+        val background = if (options.wallpaper) R.color.widget_wallpaper_background else R.color.widget_brand_background
+        val foreground = if (options.wallpaper) R.color.widget_wallpaper_foreground else R.color.widget_brand_foreground
         val views = RemoteViews(context.packageName, R.layout.widget_kairo)
-        views.setInt(R.id.widget_background, "setColorFilter", background)
+        views.widgetColor(context, R.id.widget_background, "setColorFilter", background)
         views.setTextViewText(R.id.widget_title, kind.title)
-        listOf(R.id.widget_title, R.id.widget_period, R.id.widget_total).forEach { views.setTextColor(it, foreground) }
-        views.setInt(R.id.widget_settings, "setColorFilter", foreground)
+        listOf(R.id.widget_title, R.id.widget_period, R.id.widget_total).forEach { views.widgetColor(context, it, "setTextColor", foreground) }
+        views.widgetColor(context, R.id.widget_settings, "setColorFilter", foreground)
         val settings = Intent(context, WidgetSettingsActivity::class.java)
             .setData(Uri.parse("kairo://widget/$id/settings"))
             .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
@@ -178,14 +171,14 @@ internal object WidgetUpdates {
             row.setTextViewText(R.id.widget_name, "Still due this month")
             row.setTextViewText(R.id.widget_date, "Including today")
             row.setTextViewText(R.id.widget_amount, if (options.hideAmounts) "" else money(remaining, currency))
-            listOf(R.id.widget_name, R.id.widget_date, R.id.widget_amount).forEach { row.setTextColor(it, foreground) }
+            listOf(R.id.widget_name, R.id.widget_date, R.id.widget_amount).forEach { row.widgetColor(context, it, "setTextColor", foreground) }
             row.setOnClickPendingIntent(R.id.widget_row, launch(context, id, month = true))
             views.addView(R.id.widget_rows, row)
         }
         visible.forEach { entry ->
             val row = RemoteViews(context.packageName, R.layout.widget_row)
             row.setImageViewResource(R.id.widget_icon, paymentSymbol(entry.payment.icon).drawable)
-            row.setInt(R.id.widget_icon, "setColorFilter", foreground)
+            row.widgetColor(context, R.id.widget_icon, "setColorFilter", foreground)
             row.setTextViewText(R.id.widget_name, entry.payment.name)
             val date = when (entry.date) {
                 today -> "Today"
@@ -201,7 +194,7 @@ internal object WidgetUpdates {
             row.setTextViewText(R.id.widget_date, label)
             row.setTextViewText(R.id.widget_amount,
                 if (options.hideAmounts || entry.amount == null) "" else money(entry.amount, currency))
-            listOf(R.id.widget_name, R.id.widget_date, R.id.widget_amount).forEach { row.setTextColor(it, foreground) }
+            listOf(R.id.widget_name, R.id.widget_date, R.id.widget_amount).forEach { row.widgetColor(context, it, "setTextColor", foreground) }
             row.setOnClickPendingIntent(R.id.widget_row, launch(context, id, entry.payment.id))
             views.addView(R.id.widget_rows, row)
         }
@@ -210,4 +203,11 @@ internal object WidgetUpdates {
         }
         return views
     }
+}
+
+
+// Resolve theme resources when the launcher applies the views, including after a theme change.
+private fun RemoteViews.widgetColor(context: Context, view: Int, method: String, resource: Int) {
+    if (Build.VERSION.SDK_INT >= 31) setColor(view, method, resource)
+    else setInt(view, method, context.getColor(resource))
 }

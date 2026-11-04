@@ -1,5 +1,6 @@
 package dev.robinsiegl.kairo
 
+import android.content.res.Configuration
 import android.appwidget.AppWidgetManager
 import android.view.View
 import android.widget.TextView
@@ -21,15 +22,28 @@ class WidgetLayoutTest {
             trial = true,
             cancelBy = today.plusDays(1).toString(),
         )
-        instrumentation.runOnMainSync {
-            for (kind in WidgetKind.entries) {
-                for (book in listOf(Book(), Book(payments = listOf(trial)))) {
-                    val views = WidgetUpdates.createViews(context, AppWidgetManager.getInstance(context), 99999, kind, book)
-                    val root = views.apply(context, null)
-                    assertNotNull(root.findViewById<View>(R.id.widget_settings))
-                    assertNotNull(root.findViewById<TextView>(R.id.widget_period).text)
+        val id = 99999
+        try {
+            instrumentation.runOnMainSync {
+                for (night in listOf(Configuration.UI_MODE_NIGHT_NO, Configuration.UI_MODE_NIGHT_YES)) {
+                    val config = Configuration(context.resources.configuration)
+                    config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or night
+                    val themed = context.createConfigurationContext(config)
+                    for (wallpaper in listOf(false, true)) {
+                        context.getSharedPreferences("widgets", 0).edit().putBoolean("$id.wallpaper", wallpaper).commit()
+                        for (kind in WidgetKind.entries) {
+                            for (book in listOf(Book(), Book(payments = listOf(trial)))) {
+                                val views = WidgetUpdates.createViews(themed, AppWidgetManager.getInstance(context), id, kind, book)
+                                val root = views.apply(themed, null)
+                                assertNotNull(root.findViewById<View>(R.id.widget_settings))
+                                assertNotNull(root.findViewById<TextView>(R.id.widget_period).text)
+                            }
+                        }
+                    }
                 }
             }
+        } finally {
+            context.getSharedPreferences("widgets", 0).edit().remove("$id.wallpaper").commit()
         }
     }
 
