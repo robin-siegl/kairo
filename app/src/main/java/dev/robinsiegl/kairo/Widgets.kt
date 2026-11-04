@@ -93,7 +93,7 @@ internal object WidgetUpdates {
                 val result = runCatching { Storage(app).read() }
                 active.forEach { (ids, kind) ->
                     ids.forEach { id ->
-                        render(app, manager, id, kind, result.getOrNull())
+                        manager.updateAppWidget(id, createViews(app, manager, id, kind, result.getOrNull()))
                     }
                 }
             } catch (error: Exception) {
@@ -113,7 +113,7 @@ internal object WidgetUpdates {
         return PendingIntent.getActivity(context, id, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
-    private fun render(context: Context, manager: AppWidgetManager, id: Int, kind: WidgetKind, book: Book?) {
+    internal fun createViews(context: Context, manager: AppWidgetManager, id: Int, kind: WidgetKind, book: Book?): RemoteViews {
         val options = widgetOptions(context, id)
         val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         val background = if (options.wallpaper && Build.VERSION.SDK_INT >= 31) {
@@ -137,14 +137,13 @@ internal object WidgetUpdates {
         if (book == null) {
             views.setTextViewText(R.id.widget_period, "Open Kairo to review your data")
             views.setViewVisibility(R.id.widget_total, View.GONE)
-            manager.updateAppWidget(id, views)
-            return
+            return views
         }
         val today = LocalDate.now()
         val entries = book.widgetEntries(kind, today, options.days)
         val currency = book.preferences.defaultCurrency
         val height = manager.getAppWidgetOptions(id).getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 180)
-        val rowCount = ((height - 132) / 56).coerceIn(1, 8)
+        val rowCount = ((height - if (kind == WidgetKind.Trials) 102 else 132) / 56).coerceIn(1, 8)
         val compact = height < 200 && kind in listOf(WidgetKind.Next, WidgetKind.Upcoming)
         if (compact) {
             views.setTextViewText(R.id.widget_title, WidgetKind.Next.title)
@@ -209,6 +208,6 @@ internal object WidgetUpdates {
         if (kind == WidgetKind.Upcoming && entries.isEmpty()) {
             views.setTextViewText(R.id.widget_total, "You’re all clear")
         }
-        manager.updateAppWidget(id, views)
+        return views
     }
 }
