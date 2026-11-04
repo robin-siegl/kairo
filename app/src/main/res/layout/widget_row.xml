@@ -7,5 +7,5 @@
         <TextView android:id="@+id/widget_date" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
     </LinearLayout>
     <TextView android:id="@+id/widget_amount" android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:layout_marginStart="8dp" android:textSize="14sp" android:maxLines="1" />
+        android:layout_marginStart="8dp" android:textSize="14sp" android:maxLines="1" android:maxWidth="140dp" android:ellipsize="end" />
 </LinearLayout>
