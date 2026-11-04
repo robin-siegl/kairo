@@ -31,6 +31,10 @@ SVG masters and PNG exports have transparent backgrounds. Launcher previews incl
 
 Keep at least one stem-width of clear space around the standalone mark. Use the mark alone below a 120 px wordmark width. At small sizes, keep both counters visible and use a solid high-contrast foreground. Preserve the proportions and use the supplied colors.
 
+## Launch animation
+
+On Android 12 and newer, the system splash shows the white K on brand blue. When the app is ready to draw, the mark grows gently by 12 percent while the launch surface fades away over 320 ms. The transition follows Android's animator duration setting and skips motion when animations are disabled. Returning to an already running activity uses Android's normal transition. Android 10 and 11 use the blue launch background.
+
 ## Rebuild
 
 Run `python3 scripts/build_branding.py` from the repository root with Python 3 and Inkscape installed. This regenerates the SVG kit, PNG exports, and Android vector drawables from the same path. Review launcher previews after changing the master.
