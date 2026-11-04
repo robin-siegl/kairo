@@ -16,6 +16,12 @@ Kairo is a local-first Android tracker for recurring payments and free trials. S
 
 Kairo has no accounts or bank connections. Production builds contact GitHub when you tap Check for updates. Provider links open in your browser.
 
+## Home screen widgets
+
+Add Upcoming payments, Trial deadlines, Next payment, or Month summary from your launcher’s widget picker. Resize Upcoming payments for a compact next-payment card or a list. Tap a payment to open its details, or the month summary to open Calendar.
+
+Each widget has its own settings for hiding amounts and using wallpaper colors on Android 12 and newer. Upcoming payments supports 7-day and 14-day periods. Colors follow the phone’s light/dark mode. Widgets refresh after payment changes, imports, resizing, and system date/time events, with a periodic refresh as a fallback.
+
 ## Build
 
 Use JDK 17 and Android SDK 36. Run `./gradlew :app:assembleDebug` (or `gradlew.bat :app:assembleDebug` on Windows). The **Checks** workflow also produces a `kairo-dev` APK artifact.

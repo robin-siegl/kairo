@@ -315,8 +315,9 @@ fun Calendar(
     changeMonth: (YearMonth) -> Unit,
     select: (LocalDate) -> Unit,
     open: (String) -> Unit,
+    view: String,
+    selectView: (String) -> Unit,
 ) {
-    var view by rememberSaveable { mutableStateOf("Day") }
     val currency = book.preferences.defaultCurrency
     val yearView = view == "Year"
     val start = if (yearView) month.withMonth(1).atDay(1) else month.atDay(1)
@@ -334,7 +335,7 @@ fun Calendar(
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("Day", "Month", "Year").forEach { option ->
-                    FilterChip(view == option, onClick = { view = option }, label = { Text(option) })
+                    FilterChip(view == option, onClick = { selectView(option) }, label = { Text(option) })
                 }
             }
             val period = if (yearView) "year" else "month"
@@ -395,7 +396,7 @@ fun Calendar(
                         money(byMonth[entry].orEmpty().sumOf { it.amount }, currency),
                     ) {
                         changeMonth(entry)
-                        view = "Month"
+                        selectView("Month")
                     }
                 }
             }

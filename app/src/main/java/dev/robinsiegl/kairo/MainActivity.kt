@@ -42,6 +42,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+    private var openedMonth by mutableStateOf<String?>(null)
     private var openedPayment by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,6 +50,7 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) animateLaunch()
         enableEdgeToEdge()
         openedPayment = intent.getStringExtra("payment")
+        openedMonth = intent.getStringExtra("calendar_month")
         val storage = Storage(this)
         val initial = runCatching(storage::read)
         setContent {
@@ -70,7 +72,7 @@ class MainActivity : ComponentActivity() {
             )
             MaterialTheme(colorScheme = colors) {
                 if (initial.isSuccess) {
-                    Kairo(storage, initial.getOrThrow(), openedPayment) { openedPayment = null }
+                    Kairo(storage, initial.getOrThrow(), openedPayment, openedMonth) { openedPayment = null; openedMonth = null }
                 } else {
                     Surface { Text("Kairo couldn’t read your local data. Your file is still on this device.") }
                 }
@@ -82,6 +84,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         openedPayment = intent.getStringExtra("payment")
+        openedMonth = intent.getStringExtra("calendar_month")
     }
 }
 
@@ -91,7 +94,7 @@ private enum class Tab(val label: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clearOpened: () -> Unit) {
+private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, openedMonth: String?, clearOpened: () -> Unit) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val reminders = remember(context) { Reminders(context) }
@@ -103,6 +106,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
     var trialChannelOn by remember { mutableStateOf(reminders.channelEnabled(true)) }
     var renewalChannelOn by remember { mutableStateOf(reminders.channelEnabled(false)) }
     var tab by rememberSaveable { mutableStateOf(Tab.Overview) }
+    var calendarView by rememberSaveable { mutableStateOf("Day") }
     var monthText by rememberSaveable { mutableStateOf(YearMonth.from(today).toString()) }
     var selectedDayText by rememberSaveable { mutableStateOf(today.toString()) }
     var screen by rememberSaveable { mutableStateOf("") }
@@ -178,7 +182,17 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
         }
     }
 
-    LaunchedEffect(openedPayment) {
+    LaunchedEffect(openedPayment, openedMonth) {
+        if (openedMonth != null) {
+            runCatching { YearMonth.parse(openedMonth) }.getOrNull()?.let {
+                monthText = it.toString()
+                selectedDayText = it.atDay(1).toString()
+                calendarView = "Month"
+                tab = Tab.Calendar
+                screen = ""
+            }
+            clearOpened()
+        }
         if (openedPayment != null) {
             if (book.payments.any { it.id == openedPayment }) openPayment(openedPayment)
             clearOpened()
@@ -191,6 +205,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
             if (event == Lifecycle.Event.ON_RESUME) {
                 today = LocalDate.now()
                 updateNotificationStatus()
+                WidgetUpdates.enqueue(context)
             }
         }
         owner.lifecycle.addObserver(observer)
@@ -352,7 +367,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, clear
                     Tab.Payments -> Payments(book, today, ::openPayment, ::openCategory, ::quickAction)
                     Tab.Calendar -> Calendar(
                         book, month, LocalDate.parse(selectedDayText), today,
-                        editMonth, { selectedDayText = it.toString() }, ::openPayment,
+                        editMonth, { selectedDayText = it.toString() }, ::openPayment, calendarView, { calendarView = it },
                     )
                 }
             }
