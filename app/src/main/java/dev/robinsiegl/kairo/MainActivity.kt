@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) animateLaunch()
         enableEdgeToEdge()
         openedPayment = intent.getStringExtra("payment")
         val storage = Storage(this)
@@ -55,12 +56,12 @@ class MainActivity : ComponentActivity() {
             val colors = if (dark) darkColorScheme(
                 primary = Color(0xFFADC6FF),
                 onPrimary = Color(0xFF002E6A),
-                primaryContainer = Color(0xFF16448B),
+                primaryContainer = Color(0xFF1B449C),
                 onPrimaryContainer = Color(0xFFD8E5FF),
                 secondaryContainer = Color(0xFF3C4665),
                 onSecondaryContainer = Color(0xFFDDE3FF),
             ) else lightColorScheme(
-                primary = Color(0xFF2458A7),
+                primary = Color(0xFF3367DB),
                 onPrimary = Color.White,
                 primaryContainer = Color(0xFFD8E5FF),
                 onPrimaryContainer = Color(0xFF101B37),
