@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 class WidgetSettingsActivity : ComponentActivity() {
@@ -28,7 +29,13 @@ class WidgetSettingsActivity : ComponentActivity() {
         val options = widgetOptions(this, id)
         val upcoming = AppWidgetManager.getInstance(this).getAppWidgetInfo(id)?.provider?.className == UpcomingWidget::class.java.name
         setContent {
-            MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
+            MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme(
+                primary = Color(0xFFADC6FF), onPrimary = Color(0xFF002E6A),
+                primaryContainer = Color(0xFF1B449C), onPrimaryContainer = Color(0xFFD8E5FF),
+            ) else lightColorScheme(
+                primary = Color(0xFF3367DB), onPrimary = Color.White,
+                primaryContainer = Color(0xFFD8E5FF), onPrimaryContainer = Color(0xFF101B37),
+            )) {
                 Surface(Modifier.fillMaxSize()) {
                     var days by rememberSaveable { mutableStateOf(options.days) }
                     var hide by rememberSaveable { mutableStateOf(options.hideAmounts) }
