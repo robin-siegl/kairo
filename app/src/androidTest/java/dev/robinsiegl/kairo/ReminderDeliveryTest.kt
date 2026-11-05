@@ -6,7 +6,8 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.test.platform.app.InstrumentationRegistry
-import java.time.ZonedDateTime
+import java.time.LocalDate
+import java.time.ZoneId
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -21,10 +22,12 @@ class ReminderDeliveryTest {
         val hadPermission = Build.VERSION.SDK_INT < 33 ||
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         if (!hadPermission) instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.POST_NOTIFICATIONS)
+        val today = LocalDate.now()
+        val deadline = today.plusDays(3).toString()
         val payment = Payment(name = "Trial test",
-            terms = listOf(Terms("2026-11-13", "9.99", Interval.Monthly)), trial = true, cancelBy = "2026-11-11")
+            terms = listOf(Terms(today.plusDays(5).toString(), "9.99", Interval.Monthly)), trial = true, cancelBy = deadline)
         val book = Book(payments = listOf(payment), preferences = Preferences(secondTrialReminder = true))
-        var now = ZonedDateTime.parse("2026-11-08T10:00:00+01:00[Europe/Vienna]")
+        var now = today.atTime(10, 0).atZone(ZoneId.systemDefault())
         try {
             prefs.edit().clear().commit()
             val reminders = Reminders(context) { now }
@@ -34,7 +37,7 @@ class ReminderDeliveryTest {
             assertNull(prefs.getString(events.last().key, null))
             val notification = reminders.notification(events.first(), now)
             assertEquals("Remind me tomorrow", notification.actions.single().title.toString())
-            reminders.snooze(book, payment.id, "2026-11-11", true)
+            reminders.snooze(book, payment.id, deadline, true)
             reminders.refresh(book)
             now = now.plusDays(1)
             Reminders(context) { now }.refresh(book, deliver = true)
