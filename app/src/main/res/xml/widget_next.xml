@@ -1,0 +1,9 @@
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp" android:minHeight="140dp"
+    android:minResizeWidth="180dp" android:minResizeHeight="140dp"
+    android:targetCellWidth="2" android:targetCellHeight="2"
+    android:updatePeriodMillis="1800000" android:initialLayout="@layout/widget_kairo"
+    android:previewLayout="@layout/widget_kairo"
+    android:configure="dev.robinsiegl.kairo.WidgetSettingsActivity"
+    android:resizeMode="horizontal|vertical" android:widgetCategory="home_screen"
+    android:widgetFeatures="reconfigurable" />

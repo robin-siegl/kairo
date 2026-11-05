@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Kairo Dev</string>
+    <color name="kairo_dev_icon_background">#FFFFFF</color>
+</resources>

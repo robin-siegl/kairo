@@ -1,3 +1,4 @@
 <full-backup-content>
     <include domain="file" path="kairo.json" />
+    <include domain="sharedpref" path="widgets.xml" />
 </full-backup-content>

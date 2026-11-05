@@ -40,13 +40,15 @@ fun decodeBook(text: String): Book {
 class Storage(private val context: Context) {
     private val file = AtomicFile(File(context.filesDir, "kairo.json"))
 
-    fun read(): Book = try {
-        decodeBook(file.readFully().decodeToString())
-    } catch (_: FileNotFoundException) {
-        Book()
+    fun read(): Book = synchronized(lock) {
+        try {
+            decodeBook(file.readFully().decodeToString())
+        } catch (_: FileNotFoundException) {
+            Book()
+        }
     }
 
-    fun write(book: Book) {
+    fun write(book: Book) = synchronized(lock) {
         val bytes = encodeBook(book).encodeToByteArray()
         require(bytes.size <= MAX_BACKUP_BYTES)
         val stream = file.startWrite()
@@ -58,5 +60,10 @@ class Storage(private val context: Context) {
             throw error
         }
         BackupManager(context).dataChanged()
+        WidgetUpdates.enqueue(context)
+    }
+
+    companion object {
+        private val lock = Any()
     }
 }
