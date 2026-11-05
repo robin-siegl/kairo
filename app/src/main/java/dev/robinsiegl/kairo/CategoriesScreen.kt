@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
@@ -57,7 +58,7 @@ internal fun CategoriesScreen(book: Book, today: LocalDate, open: (String) -> Un
                 trailingContent = {
                     IconButton(onClick = { edit(category) }) { Icon(Icons.Default.Edit, "Edit ${category.name}") }
                 },
-                modifier = Modifier.clickable(role = Role.Button) { open(category.name) },
+                modifier = Modifier.clip(MaterialTheme.shapes.medium).clickable(role = Role.Button) { open(category.name) },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
             )
         }
