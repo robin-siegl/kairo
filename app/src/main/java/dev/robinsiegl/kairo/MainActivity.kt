@@ -14,6 +14,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -27,6 +30,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -113,6 +118,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
     var selectedDayText by rememberSaveable { mutableStateOf(today.toString()) }
     var screen by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
+    var categoryEditorOpen by rememberSaveable { mutableStateOf(false) }
     var categoryParent by rememberSaveable { mutableStateOf("") }
     var categoryOrigin by rememberSaveable { mutableStateOf<String?>(null) }
     var detailParent by rememberSaveable { mutableStateOf("") }
@@ -152,6 +158,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
     }
 
     fun openPayment(id: String) {
+        categoryEditorOpen = false
         if (screen != "edit") detailParent = if (screen == "category") "category" else ""
         quickCancel = false
         selectedId = id
@@ -159,6 +166,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
     }
 
     fun openCategory(name: String) {
+        categoryEditorOpen = false
         if (screen != "details" || detailParent != "category") {
             categoryOrigin = selectedId.takeIf { screen == "details" }
         }
@@ -270,14 +278,22 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text(when (screen) {
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (screen == "category" && !category.isNullOrBlank()) {
+                            CategoryDot(book.allCategories().firstOrNull { it.name == category } ?: Category(requireNotNull(category)))
+                            Spacer(Modifier.width(12.dp))
+                        }
+                        Text(when (screen) {
                     "details" -> selected?.name ?: "Payment"
                     "edit" -> if (selected == null) "Add payment" else "Edit payment"
                     "settings" -> "Settings"
                     "category" -> category.orEmpty().ifBlank { "Uncategorized" }
                     "categories" -> "Categories"
                     else -> tab.label
-                }) },
+                        })
+                    }
+                },
                 navigationIcon = {
                     if (screen.isNotEmpty()) IconButton(onClick = ::back) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -286,6 +302,9 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                 actions = {
                     if (screen == "details" && selected != null) IconButton(onClick = { screen = "edit" }) {
                         Icon(Icons.Default.Edit, contentDescription = "Edit payment")
+                    }
+                    if (screen == "category" && !category.isNullOrBlank()) IconButton(onClick = { categoryEditorOpen = true }) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit category")
                     }
                     if (screen.isEmpty()) IconButton(onClick = { screen = "settings" }) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
@@ -387,6 +406,18 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                 }
             }
         }
+    }
+
+    if (categoryEditorOpen && screen == "category" && !category.isNullOrBlank()) {
+        CategoryEditor(
+            book, category,
+            save = { updated, destination ->
+                val saved = save(updated)
+                if (saved) category = destination
+                saved
+            },
+            dismiss = { categoryEditorOpen = false },
+        )
     }
 
     pendingImport?.let { incoming ->

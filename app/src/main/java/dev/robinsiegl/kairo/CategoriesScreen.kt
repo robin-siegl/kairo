@@ -22,21 +22,12 @@ import java.time.YearMonth
 @Composable
 internal fun CategoriesScreen(book: Book, today: LocalDate, open: (String) -> Unit, save: (Book) -> Boolean) {
     var editing by rememberSaveable { mutableStateOf(false) }
-    var previous by rememberSaveable { mutableStateOf<String?>(null) }
-    var name by rememberSaveable { mutableStateOf("") }
-    var color by rememberSaveable { mutableStateOf("Blue") }
-    var error by rememberSaveable { mutableStateOf<String?>(null) }
-    var merge by rememberSaveable { mutableStateOf(false) }
-    var target by rememberSaveable { mutableStateOf<String?>(null) }
-    var removing by rememberSaveable { mutableStateOf(false) }
+    var editingName by rememberSaveable { mutableStateOf<String?>(null) }
     val categories = book.allCategories()
     val month = YearMonth.from(today)
     val totals = remember(book, month) { book.spending(month.atDay(1), month.atEndOfMonth()).byCategory }
     fun edit(category: Category?) {
-        previous = category?.name
-        name = category?.name.orEmpty()
-        color = category?.color ?: "Blue"
-        error = null
+        editingName = category?.name
         editing = true
     }
     LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -70,8 +61,25 @@ internal fun CategoriesScreen(book: Book, today: LocalDate, open: (String) -> Un
             Text("Create categories to organize your payments and compare scheduled costs.")
         }
     }
-    if (editing && !merge && !removing) AlertDialog(
-        onDismissRequest = { editing = false },
+    if (editing) CategoryEditor(
+        book, editingName,
+        save = { updated, _ -> save(updated) },
+        dismiss = { editing = false },
+    )
+}
+
+@Composable
+internal fun CategoryEditor(book: Book, previous: String?, save: (Book, String) -> Boolean, dismiss: () -> Unit) {
+    val categories = book.allCategories()
+    val original = categories.firstOrNull { it.name == previous }
+    var name by rememberSaveable(previous) { mutableStateOf(previous.orEmpty()) }
+    var color by rememberSaveable(previous) { mutableStateOf(original?.color ?: "Blue") }
+    var error by rememberSaveable(previous) { mutableStateOf<String?>(null) }
+    var merge by rememberSaveable(previous) { mutableStateOf(false) }
+    var target by rememberSaveable(previous) { mutableStateOf<String?>(null) }
+    var removing by rememberSaveable(previous) { mutableStateOf(false) }
+    if (!merge && !removing) AlertDialog(
+        onDismissRequest = dismiss,
         title = { Text(if (previous == null) "Add category" else "Edit category") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -106,10 +114,10 @@ internal fun CategoriesScreen(book: Book, today: LocalDate, open: (String) -> Un
                         "A category with this name already exists."
                     else -> null
                 }
-                if (error == null && save(book.saveCategory(previous, Category(proposed, color)))) editing = false
+                if (error == null && save(book.saveCategory(previous, Category(proposed, color)), proposed)) dismiss()
             }) { Text("Save category") }
         },
-        dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } },
     )
     if (merge && previous != null) AlertDialog(
         onDismissRequest = { merge = false },
@@ -131,9 +139,9 @@ internal fun CategoriesScreen(book: Book, today: LocalDate, open: (String) -> Un
         confirmButton = {
             TextButton(enabled = target != null, onClick = {
                 val destination = target ?: return@TextButton
-                if (save(book.mergeCategory(requireNotNull(previous), destination))) {
+                if (save(book.mergeCategory(requireNotNull(previous), destination), destination)) {
                     merge = false
-                    editing = false
+                    dismiss()
                 }
             }) { Text("Merge categories") }
         },
@@ -148,9 +156,9 @@ internal fun CategoriesScreen(book: Book, today: LocalDate, open: (String) -> Un
                 if (save(book.copy(
                     categories = categories.filterNot { it.name == previous },
                     payments = book.payments.map { if (it.category == previous) it.copy(category = "") else it },
-                ))) {
+                ), "")) {
                     removing = false
-                    editing = false
+                    dismiss()
                 }
             }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Remove") }
         },

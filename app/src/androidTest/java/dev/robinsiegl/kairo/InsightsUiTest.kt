@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.assertIsDisplayed
 import java.time.LocalDate
 import java.time.YearMonth
@@ -41,4 +42,33 @@ class InsightsUiTest {
         compose.onNodeWithText("Scheduled this month").assertIsDisplayed()
         compose.onNodeWithText("Manage").assertIsDisplayed()
     }
+    @Test
+    fun sharedCategoryEditorRenamesAndRecolorsTheOpenCategory() {
+        val state = mutableStateOf(Book(
+            categories = listOf(Category("Health")),
+            payments = listOf(Payment(name = "Gym", category = "Health",
+                terms = listOf(Terms("2026-05-01", "10.00", Interval.Monthly)))),
+        ))
+        val category = mutableStateOf("Health")
+        val editing = mutableStateOf(true)
+        compose.setContent {
+            MaterialTheme {
+                if (editing.value) CategoryEditor(
+                    state.value, category.value,
+                    save = { updated, destination -> state.value = updated; category.value = destination; true },
+                    dismiss = { editing.value = false },
+                )
+            }
+        }
+        compose.onNodeWithText("Category name").performTextReplacement("Fitness")
+        compose.onNodeWithText("Teal").performClick()
+        compose.onNodeWithText("Save category").performClick()
+        compose.runOnIdle {
+            assertEquals("Fitness", category.value)
+            assertEquals("Fitness", state.value.payments.single().category)
+            assertEquals(Category("Fitness", "Teal"), state.value.categories.single())
+            assertEquals(false, editing.value)
+        }
+    }
+
 }
