@@ -104,6 +104,7 @@ data class Book(
     val version: Int = 1,
     val payments: List<Payment> = emptyList(),
     val preferences: Preferences = Preferences(),
+    val categories: List<Category> = emptyList(),
 )
 
 data class Merge(val book: Book, val added: Int, val conflicts: Int)
@@ -114,6 +115,9 @@ fun Book.merge(incoming: Book): Merge {
     val conflicts = incoming.payments.count { existing[it.id]?.let { local -> local != it } == true }
     return Merge(copy(
         payments = payments + added,
+        categories = allCategories() + incoming.allCategories().filter { item ->
+            allCategories().none { it.name == item.name }
+        },
         preferences = if (this == Book()) incoming.preferences else preferences,
     ), added.size, conflicts)
 }

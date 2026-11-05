@@ -188,7 +188,7 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
         ) { details = !details }
         if (details) {
             Field("Category", category) { category = it }
-            val categories = book.payments.map { it.category }.filter { it.isNotBlank() }.distinct().sorted()
+            val categories = book.allCategories().map { it.name }
             if (categories.isNotEmpty()) Choice("Use existing category", category, categories, { it }) { category = it }
             FormRow(
                 "Payment icon",

@@ -16,6 +16,14 @@ Kairo is a local-first Android tracker for recurring payments and free trials. S
 
 Kairo has no accounts or bank connections. Production builds contact GitHub when you tap Check for updates. Provider links open in your browser.
 
+## Insights and categories
+
+Insights shows scheduled charges for a selected month, a monthly chart for that calendar year, and a forecast from today through the next 12 months. The monthly average is that rolling forecast divided by 12, including annual and one-time charges.
+
+Manage categories from Payments or Insights. Create categories before assigning payments, choose a color, rename them across all matching payments, or merge them into another category. Removing a category makes its payments uncategorized. Category pages include ended payments and show the current month’s scheduled total.
+
+Existing categories are discovered automatically from older payment data. Exports include category definitions and colors. Import merges new categories and preserves existing local colors for matching names.
+
 ## Home screen widgets
 
 Add Upcoming payments, Trial deadlines, Next payment, or Month summary from your launcher’s widget picker. Resize Upcoming payments for a compact next-payment card or a list. Tap a payment to open its details, or the month summary to open Calendar.

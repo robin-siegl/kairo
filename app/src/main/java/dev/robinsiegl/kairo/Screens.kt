@@ -249,6 +249,7 @@ fun Payments(
     openCategory: (String) -> Unit,
     quickAction: (String, Boolean) -> Unit,
     category: String? = null,
+    manageCategories: () -> Unit = {},
 ) {
     var search by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf("Active") }
@@ -256,7 +257,7 @@ fun Payments(
         val matches = listOf(payment.name, payment.category).any { it.contains(search, true) }
         val ended = payment.end?.let { it < today } == true ||
             (payment.current.interval == Interval.Once && payment.current.anchor < today)
-        if (category != null) payment.category == category else matches && when (filter) {
+        if (category != null) (if (category.isBlank()) payment.category.isBlank() else payment.category == category) else matches && when (filter) {
             "Trials" -> payment.isTrial(today)
             "Ended" -> ended
             else -> !ended
@@ -266,6 +267,12 @@ fun Payments(
         contentPadding = PaddingValues(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (category != null) item {
+            val month = YearMonth.from(today)
+            val total = book.spending(month.atDay(1), month.atEndOfMonth()).byCategory[category] ?: BigDecimal.ZERO
+            ScheduledTotal("Scheduled this month", total, book.preferences.defaultCurrency)
+            Text("${visible.size} payments, including ended payments", style = MaterialTheme.typography.bodySmall)
+        }
         if (category == null) item {
             OutlinedTextField(search, { search = it }, Modifier.fillMaxWidth(),
                 label = { Text("Search names or categories") }, singleLine = true)
@@ -276,12 +283,16 @@ fun Payments(
             }
         }
         if (category == null && search.isBlank()) {
-            val categories = book.payments.map { it.category }.filter { it.isNotBlank() }.distinct().sorted()
+            item {
+                TextButton(onClick = manageCategories) { Text("Manage categories") }
+            }
+            val categories = book.allCategories()
             if (categories.isNotEmpty()) item {
                 Section("Categories")
                 androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(categories) { name ->
-                        AssistChip(onClick = { openCategory(name) }, label = { Text(name) })
+                    items(categories, key = { it.name }) { category ->
+                        AssistChip(onClick = { openCategory(category.name) }, label = { Text(category.name) },
+                            leadingIcon = { CategoryDot(category) })
                     }
                 }
             }

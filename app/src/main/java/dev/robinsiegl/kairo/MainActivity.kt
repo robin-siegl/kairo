@@ -14,6 +14,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -27,9 +30,12 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -89,7 +95,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class Tab(val label: String) {
-    Overview("Overview"), Payments("Payments"), Calendar("Calendar"),
+    Overview("Overview"), Payments("Payments"), Calendar("Calendar"), Insights("Insights"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -106,11 +112,14 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
     var trialChannelOn by remember { mutableStateOf(reminders.channelEnabled(true)) }
     var renewalChannelOn by remember { mutableStateOf(reminders.channelEnabled(false)) }
     var tab by rememberSaveable { mutableStateOf(Tab.Overview) }
+    var insightsMonthText by rememberSaveable { mutableStateOf(YearMonth.from(today).toString()) }
     var calendarView by rememberSaveable { mutableStateOf("Day") }
     var monthText by rememberSaveable { mutableStateOf(YearMonth.from(today).toString()) }
     var selectedDayText by rememberSaveable { mutableStateOf(today.toString()) }
     var screen by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
+    var categoryEditorOpen by rememberSaveable { mutableStateOf(false) }
+    var categoryParent by rememberSaveable { mutableStateOf("") }
     var categoryOrigin by rememberSaveable { mutableStateOf<String?>(null) }
     var detailParent by rememberSaveable { mutableStateOf("") }
     var quickCancel by rememberSaveable { mutableStateOf(false) }
@@ -149,6 +158,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
     }
 
     fun openPayment(id: String) {
+        categoryEditorOpen = false
         if (screen != "edit") detailParent = if (screen == "category") "category" else ""
         quickCancel = false
         selectedId = id
@@ -156,9 +166,11 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
     }
 
     fun openCategory(name: String) {
+        categoryEditorOpen = false
         if (screen != "details" || detailParent != "category") {
             categoryOrigin = selectedId.takeIf { screen == "details" }
         }
+        if (screen != "category" && screen != "details") categoryParent = screen
         category = name
         screen = "category"
     }
@@ -172,12 +184,14 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
         screen = when {
             screen == "edit" && selected != null -> "details"
             screen == "details" -> detailParent
+            screen == "categories" -> ""
             screen == "category" && categoryOrigin != null -> {
                 selectedId = categoryOrigin
                 categoryOrigin = null
                 detailParent = ""
                 "details"
             }
+            screen == "category" -> categoryParent
             else -> ""
         }
     }
@@ -264,13 +278,22 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text(when (screen) {
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (screen == "category" && !category.isNullOrBlank()) {
+                            CategoryDot(book.allCategories().firstOrNull { it.name == category } ?: Category(requireNotNull(category)))
+                            Spacer(Modifier.width(12.dp))
+                        }
+                        Text(when (screen) {
                     "details" -> selected?.name ?: "Payment"
                     "edit" -> if (selected == null) "Add payment" else "Edit payment"
                     "settings" -> "Settings"
-                    "category" -> category.orEmpty()
+                    "category" -> category.orEmpty().ifBlank { "Uncategorized" }
+                    "categories" -> "Categories"
                     else -> tab.label
-                }) },
+                        })
+                    }
+                },
                 navigationIcon = {
                     if (screen.isNotEmpty()) IconButton(onClick = ::back) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -280,6 +303,9 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                     if (screen == "details" && selected != null) IconButton(onClick = { screen = "edit" }) {
                         Icon(Icons.Default.Edit, contentDescription = "Edit payment")
                     }
+                    if (screen == "category" && !category.isNullOrBlank()) IconButton(onClick = { categoryEditorOpen = true }) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit category")
+                    }
                     if (screen.isEmpty()) IconButton(onClick = { screen = "settings" }) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
@@ -287,7 +313,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
             )
         },
         floatingActionButton = {
-            if (screen.isEmpty() && tab != Tab.Calendar) ExtendedFloatingActionButton(
+            if (screen.isEmpty() && tab in listOf(Tab.Overview, Tab.Payments)) ExtendedFloatingActionButton(
                 text = { Text("Add payment") },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 onClick = { selectedId = null; screen = "edit" },
@@ -299,11 +325,14 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                     NavigationBarItem(
                         selected = tab == item,
                         onClick = { tab = item },
-                        icon = { Icon(when (item) {
-                            Tab.Overview -> Icons.Default.Home
-                            Tab.Payments -> Icons.AutoMirrored.Filled.List
-                            Tab.Calendar -> Icons.Default.DateRange
-                        }, contentDescription = null) },
+                        icon = {
+                            when (item) {
+                                Tab.Overview -> Icon(Icons.Default.Home, null)
+                                Tab.Payments -> Icon(Icons.AutoMirrored.Filled.List, null)
+                                Tab.Calendar -> Icon(Icons.Default.DateRange, null)
+                                Tab.Insights -> Icon(painterResource(R.drawable.ic_material_bar_chart), null)
+                            }
+                        },
                         label = { Text(item.label) },
                     )
                 }
@@ -351,6 +380,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                         },
                     )
                 }
+                "categories" -> CategoriesScreen(book, today, ::openCategory, ::save)
                 "category" -> category?.let {
                     Payments(book, today, ::openPayment, ::openCategory, ::quickAction, category = it)
                 }
@@ -364,7 +394,11 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                         book, today, notificationsOn && trialChannelOn,
                         ::openPayment, ::enableNotifications,
                     )
-                    Tab.Payments -> Payments(book, today, ::openPayment, ::openCategory, ::quickAction)
+                    Tab.Payments -> Payments(book, today, ::openPayment, ::openCategory, ::quickAction, manageCategories = { screen = "categories" })
+                    Tab.Insights -> InsightsScreen(
+                        book, today, YearMonth.parse(insightsMonthText),
+                        { insightsMonthText = it.toString() }, ::openCategory,
+                    ) { screen = "categories" }
                     Tab.Calendar -> Calendar(
                         book, month, LocalDate.parse(selectedDayText), today,
                         editMonth, { selectedDayText = it.toString() }, ::openPayment, calendarView, { calendarView = it },
@@ -374,13 +408,31 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
         }
     }
 
+    if (categoryEditorOpen && screen == "category" && !category.isNullOrBlank()) {
+        CategoryEditor(
+            book, category,
+            save = { updated, destination ->
+                val saved = save(updated)
+                if (saved) {
+                    if (destination.isBlank()) {
+                        categoryEditorOpen = false
+                        back()
+                        category = null
+                    } else category = destination
+                }
+                saved
+            },
+            dismiss = { categoryEditorOpen = false },
+        )
+    }
+
     pendingImport?.let { incoming ->
         val merge = book.merge(incoming)
         AlertDialog(
             onDismissRequest = { pendingImport = null },
             title = { Text("Merge backup?") },
             text = {
-                Text("${merge.added} new payments. ${merge.conflicts} changed payments will keep the version on this device.")
+                Text("${merge.added} new payments. ${merge.conflicts} changed payments will keep the version on this device. Category colors already on this device will be kept.")
             },
             confirmButton = {
                 TextButton(onClick = {
