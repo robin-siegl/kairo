@@ -3,6 +3,7 @@ package dev.robinsiegl.kairo
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -33,4 +34,14 @@ class PaymentChangesUiTest {
             assertEquals("12.99", state.value.nextCharge(today)?.amount?.toPlainString())
         }
     }
+    @Test
+    fun aOneTimeChargeTodayDoesNotOfferAFuturePriceChange() {
+        val today = LocalDate.parse("2026-11-05")
+        val payment = Payment(name = "One time", terms = listOf(Terms(today.toString(), "9.99", Interval.Once)))
+        compose.setContent {
+            MaterialTheme { Column { PaymentPriceChanges(payment, today, "EUR") { true } } }
+        }
+        compose.onNodeWithText("Schedule price change").assertDoesNotExist()
+    }
+
 }

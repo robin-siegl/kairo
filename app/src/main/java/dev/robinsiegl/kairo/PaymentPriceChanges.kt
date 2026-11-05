@@ -22,14 +22,15 @@ internal fun PaymentPriceChanges(payment: Payment, today: LocalDate, currency: S
     var date by rememberSaveable { mutableStateOf(today.plusDays(1).toString()) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var removing by rememberSaveable { mutableStateOf<String?>(null) }
+    val futureCharge = payment.nextCharge(today.plusDays(1))
     val upcoming = payment.terms.drop(1).filter { it.effectiveDate > today }
     upcoming.firstOrNull()?.let {
         Text("${money(it.amount.toBigDecimal(), currency)} from ${formatDate(it.effectiveDate)}",
             color = MaterialTheme.colorScheme.primary)
     }
-    if (payment.nextCharge(today) != null) DetailAction("Schedule price change", Icons.Default.DateRange) {
+    if (futureCharge != null) DetailAction("Schedule price change", Icons.Default.DateRange) {
         amount = payment.termsOn(today).amount
-        date = (payment.nextCharge(today)?.date?.takeIf { it > today } ?: today.plusDays(1)).toString()
+        date = futureCharge.date.toString()
         error = null
         scheduling = true
     }
