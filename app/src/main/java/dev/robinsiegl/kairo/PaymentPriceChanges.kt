@@ -23,7 +23,9 @@ internal fun PaymentPriceChanges(payment: Payment, today: LocalDate, currency: S
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var removing by rememberSaveable { mutableStateOf<String?>(null) }
     val futureCharge = payment.nextCharge(today.plusDays(1))
-    val upcoming = payment.terms.drop(1).filter { it.effectiveDate > today }
+    val upcoming = payment.terms.drop(1).filter {
+        it.effectiveDate > today && (payment.end == null || it.effectiveDate <= payment.end)
+    }
     upcoming.firstOrNull()?.let {
         Text("${money(it.amount.toBigDecimal(), currency)} from ${formatDate(it.effectiveDate)}",
             color = MaterialTheme.colorScheme.primary)
@@ -82,7 +84,11 @@ internal fun PaymentPriceChanges(payment: Payment, today: LocalDate, currency: S
                     ListItem(
                         headlineContent = { Text(money(terms.amount.toBigDecimal(), currency)) },
                         supportingContent = { Text(
-                            (if (terms.effectiveDate > today) "Scheduled from " else "From ") +
+                            (when {
+                                payment.end?.let { terms.effectiveDate > it } == true -> "After end date, from "
+                                terms.effectiveDate > today -> "Scheduled from "
+                                else -> "From "
+                            }) +
                                 formatDate(terms.effectiveDate) + ", " + terms.interval.label,
                         ) },
                         trailingContent = if (index > 0 && terms.effectiveDate > today) {
