@@ -21,21 +21,7 @@ internal fun ComponentActivity.animateLaunch() {
             return@setOnExitAnimationListener
         }
 
-        val icon = splash.iconView
-        val motion = PathInterpolator(0.2f, 0f, 0f, 1f)
-        val scaleX = ObjectAnimator.ofFloat(icon, View.SCALE_X, 1f, 1.12f).apply {
-            duration = 320
-            interpolator = motion
-        }
-        val scaleY = ObjectAnimator.ofFloat(icon, View.SCALE_Y, 1f, 1.12f).apply {
-            duration = 320
-            interpolator = motion
-        }
-        val fade = ObjectAnimator.ofFloat(splash, View.ALPHA, 1f, 0f).apply {
-            startDelay = 140
-            duration = 180
-        }
-        val animation = AnimatorSet().apply { playTogether(scaleX, scaleY, fade) }
+        val animation = launchExitAnimation(splash, splash.iconView)
         val observer = object : DefaultLifecycleObserver {
             override fun onStop(owner: LifecycleOwner) {
                 animation.cancel()
@@ -47,5 +33,29 @@ internal fun ComponentActivity.animateLaunch() {
         }
         lifecycle.addObserver(observer)
         animation.start()
+    }
+}
+
+
+// Android may omit the icon on launches outside the app launcher.
+internal fun launchExitAnimation(surface: View, icon: View?): AnimatorSet {
+    val fade = ObjectAnimator.ofFloat(surface, View.ALPHA, 1f, 0f).apply {
+        startDelay = if (icon == null) 0 else 140
+        duration = 180
+    }
+    return AnimatorSet().apply {
+        playTogether(fade)
+        if (icon != null) {
+            val motion = PathInterpolator(0.2f, 0f, 0f, 1f)
+            val scaleX = ObjectAnimator.ofFloat(icon, View.SCALE_X, 1f, 1.12f).apply {
+                duration = 320
+                interpolator = motion
+            }
+            val scaleY = ObjectAnimator.ofFloat(icon, View.SCALE_Y, 1f, 1.12f).apply {
+                duration = 320
+                interpolator = motion
+            }
+            playTogether(scaleX, scaleY, fade)
+        }
     }
 }
