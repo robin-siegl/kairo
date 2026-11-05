@@ -34,3 +34,9 @@ internal fun Payment.updatedTerms(replacement: Terms, today: LocalDate): List<Te
     }
     return terms.filter { it.effectiveDate < today } + replacement.copy(effectiveFrom = today.toString()) + future
 }
+
+
+internal fun Payment.removeScheduledPrice(date: LocalDate, today: LocalDate): Payment {
+    require(date > today && terms.indexOfFirst { it.effectiveDate == date } > 0)
+    return copy(terms = terms.filterNot { it.effectiveDate == date })
+}

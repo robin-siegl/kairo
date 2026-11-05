@@ -53,4 +53,12 @@ class PaymentChangesTest {
             ended.schedulePrice("12.99", LocalDate.parse("2026-12-01"), today)
         }
     }
+    @Test
+    fun removingAPendingChangeRestoresThePriorPriceAndCannotEraseAnEffectiveChange() {
+        val effective = LocalDate.parse("2026-12-01")
+        val changed = payment.schedulePrice("12.99", effective, today)
+        assertEquals(payment, changed.removeScheduledPrice(effective, today))
+        assertThrows(IllegalArgumentException::class.java) { changed.removeScheduledPrice(effective, effective) }
+    }
+
 }

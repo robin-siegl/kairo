@@ -106,7 +106,12 @@ internal fun PaymentPriceChanges(payment: Payment, today: LocalDate, currency: S
         text = { Text("The preceding price will continue until the next scheduled change.") },
         confirmButton = {
             TextButton(onClick = {
-                if (save(payment.copy(terms = payment.terms.filterNot { it.effectiveFrom == removing }))) removing = null
+                val effective = removing?.let(LocalDate::parse) ?: return@TextButton
+                if (effective <= today) {
+                    removing = null
+                    return@TextButton
+                }
+                if (save(payment.removeScheduledPrice(effective, today))) removing = null
             }) { Text("Remove change") }
         },
         dismissButton = { TextButton(onClick = { removing = null }) { Text("Keep change") } },
