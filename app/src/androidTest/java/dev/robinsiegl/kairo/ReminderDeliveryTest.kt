@@ -51,7 +51,6 @@ class ReminderDeliveryTest {
             original.forEach { (key, value) -> if (value is String) editor.putString(key, value) }
             editor.commit()
             Reminders(context).refresh(originalBook)
-            if (!hadPermission) instrumentation.uiAutomation.revokeRuntimePermission(context.packageName, Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 }
