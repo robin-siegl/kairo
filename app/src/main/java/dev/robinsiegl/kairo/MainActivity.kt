@@ -413,7 +413,13 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
             book, category,
             save = { updated, destination ->
                 val saved = save(updated)
-                if (saved) category = destination
+                if (saved) {
+                    if (destination.isBlank()) {
+                        categoryEditorOpen = false
+                        back()
+                        category = null
+                    } else category = destination
+                }
                 saved
             },
             dismiss = { categoryEditorOpen = false },
