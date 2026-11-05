@@ -388,6 +388,13 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                     book.preferences, notificationsOn && trialChannelOn && renewalChannelOn,
                     { save(book.copy(preferences = it)) }, ::enableNotifications,
                     { export.launch("kairo-backup.json") }, { import.launch(arrayOf("application/json", "text/plain")) },
+                    testNotification = { trial ->
+                        if (reminders.test(trial)) scope.launch { snackbar.showSnackbar("Test notification sent") }
+                        else {
+                            scope.launch { snackbar.showSnackbar("Enable notifications, then try the test again.") }
+                            enableNotifications()
+                        }
+                    },
                 )
                 else -> when (tab) {
                     Tab.Overview -> Overview(

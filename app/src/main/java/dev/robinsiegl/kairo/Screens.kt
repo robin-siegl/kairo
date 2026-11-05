@@ -256,7 +256,7 @@ fun Payments(
     val visible = book.payments.filter { payment ->
         val matches = listOf(payment.name, payment.category).any { it.contains(search, true) }
         val ended = payment.end?.let { it < today } == true ||
-            (payment.current.interval == Interval.Once && payment.current.anchor < today)
+            (payment.termsOn(today).interval == Interval.Once && payment.termsOn(today).anchor < today)
         if (category != null) (if (category.isBlank()) payment.category.isBlank() else payment.category == category) else matches && when (filter) {
             "Trials" -> payment.isTrial(today)
             "Ended" -> ended
@@ -303,12 +303,12 @@ fun Payments(
                 payment.end?.let { it < today } == true -> "Ended"
                 payment.cancelled -> "Cancelled"
                 payment.isTrial(today) -> "Free trial"
-                else -> payment.current.interval.label
+                else -> payment.termsOn(today).interval.label
             }
             PaymentRow(
                 payment,
                 listOf(status, payment.category).filter { it.isNotBlank() }.joinToString(", "),
-                money(payment.current.amount.toBigDecimal(), book.preferences.defaultCurrency),
+                money(payment.termsOn(today).amount.toBigDecimal(), book.preferences.defaultCurrency),
                 open,
                 quickAction,
                 canCancel = !payment.cancelled && payment.nextCharge(today) != null,

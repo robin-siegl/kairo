@@ -15,20 +15,33 @@ import android.net.Uri
 import android.util.Log
 import java.time.LocalDate
 import java.time.ZonedDateTime
+import kotlinx.serialization.json.Json
 
 private const val TRIALS = "trials"
 private const val RENEWALS = "renewals"
 private const val ALARM = "dev.robinsiegl.kairo.REMIND"
+private const val SNOOZE = "dev.robinsiegl.kairo.SNOOZE"
+private const val SNOOZES_KEY = "__snoozes"
+private val reminderJson = Json
 
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         runCatching {
-            Reminders(context).refresh(Storage(context).read(), deliver = intent.action == ALARM)
+            val reminders = Reminders(context)
+            val book = Storage(context).read()
+            if (intent.action == SNOOZE) {
+                reminders.snooze(book, intent.getStringExtra("payment").orEmpty(),
+                    intent.getStringExtra("event").orEmpty(), intent.getBooleanExtra("trial", false))
+            }
+            reminders.refresh(book, deliver = intent.action == ALARM)
         }.onFailure { Log.e("Kairo", "Could not refresh reminders", it) }
     }
 }
 
-class Reminders(private val context: Context) {
+class Reminders(
+    private val context: Context,
+    private val currentTime: () -> ZonedDateTime = { ZonedDateTime.now() },
+) {
     private val manager = requireNotNull(context.getSystemService(NotificationManager::class.java))
     private val alarm = requireNotNull(context.getSystemService(AlarmManager::class.java))
     private val delivered = context.getSharedPreferences("delivered", Context.MODE_PRIVATE)
@@ -45,73 +58,84 @@ class Reminders(private val context: Context) {
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
 
     fun channelEnabled(trial: Boolean): Boolean = enabled() &&
-        manager.getNotificationChannel(if (trial) TRIALS else RENEWALS)?.importance !=
-        NotificationManager.IMPORTANCE_NONE
+        manager.getNotificationChannel(if (trial) TRIALS else RENEWALS)?.importance != NotificationManager.IMPORTANCE_NONE
 
     fun dismiss(paymentId: String) {
         manager.cancel(paymentId, 0)
     }
 
-    fun refresh(book: Book, deliver: Boolean = false) {
+    private fun snoozes(): List<SnoozedReminder> = runCatching {
+        reminderJson.decodeFromString<List<SnoozedReminder>>(delivered.getString(SNOOZES_KEY, "[]") ?: "[]")
+    }.getOrDefault(emptyList())
+
+    internal fun snooze(book: Book, paymentId: String, eventDate: String, trial: Boolean) = synchronized(lock) {
+        val now = currentTime()
+        val event = reminderEvents(book, now).firstOrNull {
+            it.payment.id == paymentId && it.event.toString() == eventDate && it.trial == trial
+        }
+        if (event == null || !channelEnabled(trial) || !event.canSnooze(now.toLocalDate())) return@synchronized
+        val record = SnoozedReminder(paymentId, eventDate, trial, now.toLocalDate().plusDays(1).toString())
+        val updated = snoozes().filterNot { it.identity == event.identity } + record
+        delivered.edit().putString(SNOOZES_KEY, reminderJson.encodeToString(updated)).apply()
+        dismiss(paymentId)
+    }
+
+    fun refresh(book: Book, deliver: Boolean = false): Unit = synchronized(lock) {
         createChannels()
         val trigger = PendingIntent.getBroadcast(
             context, 0, Intent(context, ReminderReceiver::class.java).setAction(ALARM),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         alarm.cancel(trigger)
-        if (!enabled()) return
-
-        val now = ZonedDateTime.now()
+        val now = currentTime()
         val today = now.toLocalDate()
+        val events = reminderEvents(book, now).filter { channelEnabled(it.trial) }
+        val snoozed = validSnoozes(snoozes(), events, today)
         val prefs = book.preferences
-        val sent = delivered.all
-        val editor = delivered.edit()
-        sent.filterValues {
-            val date = it as? String
-            date == null || LocalDate.parse(date) < today
-        }.keys.forEach(editor::remove)
-        var next: Long? = null
-
-        for (payment in book.payments) {
-            val trial = payment.isTrial(today)
-            if (!channelEnabled(trial) || (trial && !prefs.trialReminders) || (!trial && !payment.remind)) continue
-            val firstDate = if (trial) payment.trialDeadline(today) else payment.nextCharge(today)?.date
-            val target = firstDate?.takeIf { it >= today } ?: continue
-            val lead = if (trial) prefs.trialLead else prefs.renewalLead
-            val event = if (trial) {
-                target.takeUnless { "${payment.id}:true:$it" in sent }
-            } else {
-                payment.charges(target, target.plusYears(1))
-                    .firstOrNull { "${payment.id}:false:${it.date}" !in sent }?.date
-            } ?: continue
-            val dateTime = event.minusDays(lead.toLong())
+        val times = snoozed.associate { snooze ->
+            snooze.identity to LocalDate.parse(snooze.dueDate)
                 .atTime(prefs.reminderHour, prefs.reminderMinute).atZone(now.zone)
-            if (deliver && dateTime <= now) {
-                notify(payment, event, trial)
-                editor.putString("${payment.id}:$trial:$event", event.toString())
-                if (!trial) {
-                    val following = payment.charges(event.plusDays(1), event.plusYears(1))
-                        .firstOrNull { "${payment.id}:false:${it.date}" !in sent }?.date ?: continue
-                    val nextTime = following.minusDays(lead.toLong())
-                        .atTime(prefs.reminderHour, prefs.reminderMinute).atZone(now.zone)
-                    next = minOf(next ?: Long.MAX_VALUE, nextTime.toInstant().toEpochMilli())
-                }
-            } else {
-                next = minOf(next ?: Long.MAX_VALUE, dateTime.toInstant().toEpochMilli())
+        }
+        val editor = delivered.edit()
+        val sent = delivered.all.filterKeys { it != SNOOZES_KEY }.filter { (_, value) ->
+            val date = runCatching { LocalDate.parse(value as? String ?: "") }.getOrNull()
+            date != null && date >= today
+        }.keys.toMutableSet()
+        delivered.all.keys.filter { it != SNOOZES_KEY && it !in sent }.forEach(editor::remove)
+        val unsent = events.filter { it.key !in sent }
+        val ready = unsent.filter { it.at <= now && (times[it.identity]?.let { time -> time <= now } != false) }
+        val snoozedDue = events.filter { times[it.identity]?.let { time -> time <= now } == true }
+            .groupBy { it.identity }.values.map { group -> group.minBy { it.at } }
+        val notifications = (ready + snoozedDue).distinctBy { it.key }.groupBy { it.payment.id }
+        val consumed = mutableSetOf<String>()
+        if (deliver && enabled()) notifications.values.forEach { due ->
+            val nearest = due.filter { it.event > today }.minByOrNull { it.event } ?: due.minBy { it.event }
+            notify(nearest, now)
+            due.forEach {
+                editor.putString(it.key, it.event.toString())
+                sent.add(it.key)
+                consumed.add(it.identity)
             }
         }
-        editor.apply()
+        val retained = snoozed.filterNot { it.identity in consumed }
+        editor.putString(SNOOZES_KEY, reminderJson.encodeToString(retained)).apply()
+        if (!enabled()) return@synchronized
+        val snoozeTimes = retained.mapNotNull { times[it.identity] }
+        val next = events.filter { it.key !in sent }.map { event ->
+            maxOf(event.at, times[event.identity] ?: event.at)
+        }.plus(snoozeTimes).minOrNull()
         next?.let {
             alarm.setAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP, maxOf(it, now.toInstant().toEpochMilli() + 1_000), trigger,
+                AlarmManager.RTC_WAKEUP,
+                maxOf(it.toInstant().toEpochMilli(), now.toInstant().toEpochMilli() + 1_000),
+                trigger,
             )
         }
+        Unit
     }
 
-    private fun notify(payment: Payment, event: LocalDate, trial: Boolean) {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) return
+    internal fun notification(event: ReminderEvent, now: ZonedDateTime): Notification {
+        val payment = event.payment
         val open = PendingIntent.getActivity(
             context, payment.id.hashCode(),
             Intent(context, MainActivity::class.java)
@@ -121,18 +145,55 @@ class Reminders(private val context: Context) {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val message = when {
-            trial && payment.cancelBy != null -> "Cancel by ${formatDate(event)}"
-            trial -> "First charge on ${formatDate(event)}"
-            else -> "Renews on ${formatDate(event)}"
+            event.trial && payment.cancelBy != null -> "Cancel by ${formatDate(event.event)}"
+            event.trial -> "First charge on ${formatDate(event.event)}"
+            else -> "Renews on ${formatDate(event.event)}"
         }
-        val notification = Notification.Builder(context, if (trial) TRIALS else RENEWALS)
+        val builder = Notification.Builder(context, if (event.trial) TRIALS else RENEWALS)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(payment.name)
             .setContentText(message)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setContentIntent(open)
             .setAutoCancel(true)
-            .build()
-        manager.notify(payment.id, 0, notification)
+        if (event.canSnooze(now.toLocalDate())) {
+            val intent = Intent(context, ReminderReceiver::class.java).setAction(SNOOZE)
+                .setData(Uri.parse("kairo://snooze").buildUpon().appendPath(payment.id)
+                    .appendPath(event.event.toString()).appendPath(event.trial.toString()).build())
+                .putExtra("payment", payment.id).putExtra("event", event.event.toString())
+                .putExtra("trial", event.trial)
+            val action = PendingIntent.getBroadcast(context, 0, intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            builder.addAction(Notification.Action.Builder(null, "Remind me tomorrow", action).build())
+        }
+        return builder.build()
+    }
+
+    private fun notify(event: ReminderEvent, now: ZonedDateTime) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+        manager.notify(event.payment.id, 0, notification(event, now))
+    }
+
+    fun test(trial: Boolean): Boolean {
+        createChannels()
+        if (!channelEnabled(trial)) return false
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return false
+        val open = PendingIntent.getActivity(context, if (trial) 1 else 2,
+            Intent(context, MainActivity::class.java)
+                .setData(Uri.parse("kairo://test/${if (trial) "trial" else "renewal"}")),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val notification = Notification.Builder(context, if (trial) TRIALS else RENEWALS)
+            .setSmallIcon(R.drawable.ic_notification).setContentTitle("Kairo test reminder")
+            .setContentText(if (trial) "Trial notifications are ready." else "Renewal notifications are ready.")
+            .setVisibility(Notification.VISIBILITY_PRIVATE).setContentIntent(open)
+            .setAutoCancel(true).setTimeoutAfter(60_000).build()
+        manager.notify("test", if (trial) 1 else 2, notification)
+        return true
+    }
+
+    companion object {
+        private val lock = Any()
     }
 }

@@ -16,6 +16,14 @@ Kairo is a local-first Android tracker for recurring payments and free trials. S
 
 Kairo has no accounts or bank connections. Production builds contact GitHub when you tap Check for updates. Provider links open in your browser.
 
+## Reminders and price changes
+
+Enable a second trial reminder in Settings for an additional alert one day before the cancellation deadline or first charge. A one-day primary lead already covers this alert. Test trial and renewal notification channels from Settings.
+
+Notifications offer “Remind me tomorrow” while another reminder still fits before the renewal or within an explicit cancellation deadline. Snoozes use your configured local reminder time and survive app restarts and phone reboots. Android schedules delivery inexactly, so keep the deadline in view in Kairo.
+
+Payment details supports future price changes and a price history. Changes apply to charges on or after the effective date and preserve the original recurrence anchor. Scheduled changes can be removed from Price history. Editing a payment preserves future price dates and applies the updated billing schedule to them.
+
 ## Insights and categories
 
 Insights shows scheduled charges for a selected month, a monthly chart for that calendar year, and a forecast from today through the next 12 months. The monthly average is that rolling forecast divided by 12, including annual and one-time charges.
