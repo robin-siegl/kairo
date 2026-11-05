@@ -18,6 +18,8 @@ fun decodeBook(text: String): Book {
     val book = json.decodeFromString<Book>(text)
     require(book.version == 1)
     require(book.payments.distinctBy { it.id }.size == book.payments.size)
+    require(book.categories.map { it.name }.distinct().size == book.categories.size)
+    require(book.categories.all { it.name.isNotBlank() && it.name == it.name.trim() && it.color in categoryColors })
     val prefs = book.preferences
     Currency.getInstance(prefs.defaultCurrency)
     require(prefs.renewalLead in 1..7 && prefs.trialLead in 1..7)

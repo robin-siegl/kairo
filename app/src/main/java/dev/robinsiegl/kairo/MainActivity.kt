@@ -30,6 +30,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -89,7 +90,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class Tab(val label: String) {
-    Overview("Overview"), Payments("Payments"), Calendar("Calendar"),
+    Overview("Overview"), Payments("Payments"), Calendar("Calendar"), Insights("Insights"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -111,6 +112,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
     var selectedDayText by rememberSaveable { mutableStateOf(today.toString()) }
     var screen by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
+    var categoryParent by rememberSaveable { mutableStateOf("") }
     var categoryOrigin by rememberSaveable { mutableStateOf<String?>(null) }
     var detailParent by rememberSaveable { mutableStateOf("") }
     var quickCancel by rememberSaveable { mutableStateOf(false) }
@@ -159,6 +161,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
         if (screen != "details" || detailParent != "category") {
             categoryOrigin = selectedId.takeIf { screen == "details" }
         }
+        if (screen != "category" && screen != "details") categoryParent = screen
         category = name
         screen = "category"
     }
@@ -172,12 +175,14 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
         screen = when {
             screen == "edit" && selected != null -> "details"
             screen == "details" -> detailParent
+            screen == "categories" -> ""
             screen == "category" && categoryOrigin != null -> {
                 selectedId = categoryOrigin
                 categoryOrigin = null
                 detailParent = ""
                 "details"
             }
+            screen == "category" -> categoryParent
             else -> ""
         }
     }
@@ -268,7 +273,8 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                     "details" -> selected?.name ?: "Payment"
                     "edit" -> if (selected == null) "Add payment" else "Edit payment"
                     "settings" -> "Settings"
-                    "category" -> category.orEmpty()
+                    "category" -> category.orEmpty().ifBlank { "Uncategorized" }
+                    "categories" -> "Categories"
                     else -> tab.label
                 }) },
                 navigationIcon = {
@@ -287,7 +293,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
             )
         },
         floatingActionButton = {
-            if (screen.isEmpty() && tab != Tab.Calendar) ExtendedFloatingActionButton(
+            if (screen.isEmpty() && tab in listOf(Tab.Overview, Tab.Payments)) ExtendedFloatingActionButton(
                 text = { Text("Add payment") },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 onClick = { selectedId = null; screen = "edit" },
@@ -299,11 +305,14 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                     NavigationBarItem(
                         selected = tab == item,
                         onClick = { tab = item },
-                        icon = { Icon(when (item) {
-                            Tab.Overview -> Icons.Default.Home
-                            Tab.Payments -> Icons.AutoMirrored.Filled.List
-                            Tab.Calendar -> Icons.Default.DateRange
-                        }, contentDescription = null) },
+                        icon = {
+                            when (item) {
+                                Tab.Overview -> Icon(Icons.Default.Home, null)
+                                Tab.Payments -> Icon(Icons.AutoMirrored.Filled.List, null)
+                                Tab.Calendar -> Icon(Icons.Default.DateRange, null)
+                                Tab.Insights -> Icon(painterResource(R.drawable.ic_material_bar_chart), null)
+                            }
+                        },
                         label = { Text(item.label) },
                     )
                 }
@@ -351,6 +360,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                         },
                     )
                 }
+                "categories" -> CategoriesScreen(book, today, ::openCategory, ::save)
                 "category" -> category?.let {
                     Payments(book, today, ::openPayment, ::openCategory, ::quickAction, category = it)
                 }
@@ -364,7 +374,8 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                         book, today, notificationsOn && trialChannelOn,
                         ::openPayment, ::enableNotifications,
                     )
-                    Tab.Payments -> Payments(book, today, ::openPayment, ::openCategory, ::quickAction)
+                    Tab.Payments -> Payments(book, today, ::openPayment, ::openCategory, ::quickAction, manageCategories = { screen = "categories" })
+                    Tab.Insights -> InsightsScreen(book, today, ::openCategory) { screen = "categories" }
                     Tab.Calendar -> Calendar(
                         book, month, LocalDate.parse(selectedDayText), today,
                         editMonth, { selectedDayText = it.toString() }, ::openPayment, calendarView, { calendarView = it },
@@ -380,7 +391,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
             onDismissRequest = { pendingImport = null },
             title = { Text("Merge backup?") },
             text = {
-                Text("${merge.added} new payments. ${merge.conflicts} changed payments will keep the version on this device.")
+                Text("${merge.added} new payments. ${merge.conflicts} changed payments will keep the version on this device. Category colors already on this device will be kept.")
             },
             confirmButton = {
                 TextButton(onClick = {
