@@ -107,6 +107,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
     var trialChannelOn by remember { mutableStateOf(reminders.channelEnabled(true)) }
     var renewalChannelOn by remember { mutableStateOf(reminders.channelEnabled(false)) }
     var tab by rememberSaveable { mutableStateOf(Tab.Overview) }
+    var insightsMonthText by rememberSaveable { mutableStateOf(YearMonth.from(today).toString()) }
     var calendarView by rememberSaveable { mutableStateOf("Day") }
     var monthText by rememberSaveable { mutableStateOf(YearMonth.from(today).toString()) }
     var selectedDayText by rememberSaveable { mutableStateOf(today.toString()) }
@@ -375,7 +376,10 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                         ::openPayment, ::enableNotifications,
                     )
                     Tab.Payments -> Payments(book, today, ::openPayment, ::openCategory, ::quickAction, manageCategories = { screen = "categories" })
-                    Tab.Insights -> InsightsScreen(book, today, ::openCategory) { screen = "categories" }
+                    Tab.Insights -> InsightsScreen(
+                        book, today, YearMonth.parse(insightsMonthText),
+                        { insightsMonthText = it.toString() }, ::openCategory,
+                    ) { screen = "categories" }
                     Tab.Calendar -> Calendar(
                         book, month, LocalDate.parse(selectedDayText), today,
                         editMonth, { selectedDayText = it.toString() }, ::openPayment, calendarView, { calendarView = it },

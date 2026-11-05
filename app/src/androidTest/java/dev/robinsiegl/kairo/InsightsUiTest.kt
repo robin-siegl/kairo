@@ -8,6 +8,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.assertIsDisplayed
 import java.time.LocalDate
+import java.time.YearMonth
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -34,7 +35,7 @@ class InsightsUiTest {
     fun insightsShowsAnEmptyMonthWithoutHidingCategoryManagement() {
         compose.setContent {
             MaterialTheme {
-                InsightsScreen(Book(), LocalDate.parse("2026-05-01"), {}, {})
+                InsightsScreen(Book(), LocalDate.parse("2026-05-01"), YearMonth.of(2026, 5), {}, {}, {})
             }
         }
         compose.onNodeWithText("Scheduled this month").assertIsDisplayed()

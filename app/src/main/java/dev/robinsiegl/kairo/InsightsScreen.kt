@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -12,7 +13,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,9 +43,19 @@ internal fun CategoryDot(category: Category) {
 }
 
 @Composable
-internal fun InsightsScreen(book: Book, today: LocalDate, openCategory: (String) -> Unit, manageCategories: () -> Unit) {
-    var selectedText by rememberSaveable { mutableStateOf(YearMonth.from(today).toString()) }
-    val selected = YearMonth.parse(selectedText)
+internal fun InsightsScreen(
+    book: Book,
+    today: LocalDate,
+    selected: YearMonth,
+    selectMonth: (YearMonth) -> Unit,
+    openCategory: (String) -> Unit,
+    manageCategories: () -> Unit,
+) {
+    val chartState = rememberLazyListState(initialFirstVisibleItemIndex = (selected.monthValue - 3).coerceAtLeast(0))
+    LaunchedEffect(selected) {
+        val index = selected.monthValue - 1
+        if (chartState.layoutInfo.visibleItemsInfo.none { it.index == index }) chartState.scrollToItem(index)
+    }
     val currency = book.preferences.defaultCurrency
     val summary = remember(book, selected) { book.spending(selected.atDay(1), selected.atEndOfMonth()) }
     val year = remember(book, selected.year) { book.yearForecast(YearMonth.of(selected.year, 1)) }
@@ -60,12 +70,12 @@ internal fun InsightsScreen(book: Book, today: LocalDate, openCategory: (String)
     ) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { selectedText = selected.minusMonths(1).toString() }) {
+                IconButton(onClick = { selectMonth(selected.minusMonths(1)) }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Previous month")
                 }
                 Text(selected.format(DateTimeFormatter.ofPattern("LLLL yyyy")), Modifier.weight(1f),
                     textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
-                IconButton(onClick = { selectedText = selected.plusMonths(1).toString() }) {
+                IconButton(onClick = { selectMonth(selected.plusMonths(1)) }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowForward, "Next month")
                 }
             }
@@ -82,14 +92,14 @@ internal fun InsightsScreen(book: Book, today: LocalDate, openCategory: (String)
         item {
             Text("${selected.year} by month", style = MaterialTheme.typography.titleMedium)
             Text("Tap a month to see its breakdown", style = MaterialTheme.typography.bodySmall)
-            LazyRow(Modifier.fillMaxWidth().height(160.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            LazyRow(Modifier.fillMaxWidth().height(160.dp), state = chartState, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 items(year, key = { it.first.toString() }) { (month, amount) ->
                     Column(
                         Modifier.width(48.dp).fillMaxHeight()
                             .semantics(mergeDescendants = true) {
                                 contentDescription = "${month.format(DateTimeFormatter.ofPattern("LLLL yyyy"))}, ${money(amount, currency)}"
                             }
-                            .clickable(role = Role.Button) { selectedText = month.toString() },
+                            .clickable(role = Role.Button) { selectMonth(month) },
                         verticalArrangement = Arrangement.Bottom,
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
