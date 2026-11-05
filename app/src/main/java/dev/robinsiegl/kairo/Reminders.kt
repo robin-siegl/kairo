@@ -89,8 +89,9 @@ class Reminders(
         alarm.cancel(trigger)
         val now = currentTime()
         val today = now.toLocalDate()
-        val events = reminderEvents(book, now).filter { channelEnabled(it.trial) }
-        val snoozed = validSnoozes(snoozes(), events, today)
+        val allEvents = reminderEvents(book, now)
+        val events = allEvents.filter { channelEnabled(it.trial) }
+        val snoozed = validSnoozes(snoozes(), allEvents, today)
         val prefs = book.preferences
         val times = snoozed.associate { snooze ->
             snooze.identity to LocalDate.parse(snooze.dueDate)
@@ -120,7 +121,8 @@ class Reminders(
         val retained = snoozed.filterNot { it.identity in consumed }
         editor.putString(SNOOZES_KEY, reminderJson.encodeToString(retained)).apply()
         if (!enabled()) return@synchronized
-        val snoozeTimes = retained.mapNotNull { times[it.identity] }
+        val activeIdentities = events.map { it.identity }.toSet()
+        val snoozeTimes = retained.filter { it.identity in activeIdentities }.mapNotNull { times[it.identity] }
         val next = events.filter { it.key !in sent }.map { event ->
             maxOf(event.at, times[event.identity] ?: event.at)
         }.plus(snoozeTimes).minOrNull()
