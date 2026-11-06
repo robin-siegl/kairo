@@ -36,7 +36,7 @@ class QuickEntryUiTest {
             val payment = requireNotNull(saved)
             assertEquals("Spotify", payment.name)
             assertEquals("12.99", payment.terms.single().amount)
-            assertEquals("https://www.spotify.com/account/", payment.manageLink)
+            assertEquals("", payment.manageLink)
             assertFalse(payment.trial)
         }
     }

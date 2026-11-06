@@ -13,6 +13,11 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 
+// A neutral plate keeps fixed-color marks separate from wallpaper-derived accent colors.
+@Composable
+internal fun paymentIconContainer(id: String): Color =
+    if (paymentSymbol(id).brand) Color(0xFF202124) else MaterialTheme.colorScheme.primaryContainer
+
 @Composable
 internal fun PaymentSymbolIcon(id: String) {
     val symbol = paymentSymbol(id)

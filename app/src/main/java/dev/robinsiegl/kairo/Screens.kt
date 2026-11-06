@@ -133,7 +133,7 @@ private fun PaymentRow(
             headlineContent = { Text(payment.name) },
             supportingContent = { Text(detail) },
             leadingContent = {
-                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primaryContainer) {
+                Surface(shape = MaterialTheme.shapes.medium, color = paymentIconContainer(payment.icon)) {
                     Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { PaymentIcon(payment) }
                 }
             },

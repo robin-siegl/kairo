@@ -1,6 +1,7 @@
 package dev.robinsiegl.kairo
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -296,8 +297,10 @@ internal fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, draf
                             val selected = selectedId == symbol.id
                             Surface(
                                 shape = MaterialTheme.shapes.small,
-                                color = if (selected) MaterialTheme.colorScheme.primaryContainer
+                                color = if (symbol.brand) paymentIconContainer(symbol.id)
+                                    else if (selected) MaterialTheme.colorScheme.primaryContainer
                                     else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
                             ) {
                                 Box(
                                     Modifier.height(48.dp)

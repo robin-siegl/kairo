@@ -9,6 +9,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -29,7 +31,12 @@ internal fun ServicePicker(choose: (ServicePreset?) -> Unit) {
                     modifier = Modifier.clickable { choose(service) },
                     headlineContent = { Text(service.name) },
                     supportingContent = { Text(service.category) },
-                    leadingContent = { PaymentSymbolIcon(service.icon) },
+                    leadingContent = {
+                        Surface(shape = MaterialTheme.shapes.medium, color = paymentIconContainer(service.icon)) {
+                            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { PaymentSymbolIcon(service.icon) }
+                        }
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 )
             }
         }
