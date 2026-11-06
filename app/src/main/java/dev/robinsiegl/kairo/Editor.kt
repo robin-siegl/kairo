@@ -81,7 +81,7 @@ private fun <T> Choice(label: String, value: T, options: List<T>, text: (T) -> S
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DateField(label: String, value: String?, today: LocalDate, change: (String) -> Unit) {
+internal fun DateField(label: String, value: String?, today: LocalDate, change: (String) -> Unit) {
     var open by rememberSaveable { mutableStateOf(false) }
     FormRow(label, value?.let { formatDate(LocalDate.parse(it)) } ?: "Choose date", Icons.Default.DateRange) { open = true }
     if (open) {
@@ -145,7 +145,7 @@ private fun isWebLink(value: String): Boolean = runCatching {
 
 @Composable
 fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Payment) -> Unit) {
-    val old = payment?.current
+    val old = payment?.termsOn(today)
     var name by rememberSaveable { mutableStateOf(payment?.name.orEmpty()) }
     var amount by rememberSaveable { mutableStateOf(old?.amount.orEmpty()) }
     val currency = book.preferences.defaultCurrency
@@ -172,6 +172,9 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
             label = { Text(if (trial) "Price after trial" else "Amount") },
             trailingIcon = { Text(currency, Modifier.padding(horizontal = 12.dp)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+        if (payment?.terms?.any { it.effectiveDate > today && it != old } == true) {
+            Text("Scheduled prices keep their dates and follow this billing schedule.", style = MaterialTheme.typography.bodySmall)
+        }
         Text("Schedule", style = MaterialTheme.typography.titleMedium)
         Choice("Repeats", interval, Interval.entries, { it.label }) { interval = it }
         Toggle("Currently on a free trial", trial) { trial = it }
@@ -234,12 +237,7 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
             }
             if (error == null && price != null) {
                 val newTerms = Terms(start, price.toPlainString(), interval)
-                val terms = when {
-                    payment == null || old == null -> listOf(newTerms)
-                    old.copy(effectiveFrom = old.firstCharge) == newTerms -> payment.terms
-                    payment.charges(payment.terms.first().anchor, today.minusDays(1)).none() -> listOf(newTerms)
-                    else -> payment.terms.filter { it.effectiveDate < today } + newTerms.copy(effectiveFrom = today.toString())
-                }
+                val terms = payment?.updatedTerms(newTerms, today) ?: listOf(newTerms)
                 val preservePastTrial = payment?.trial == true && !payment.isTrial(today) && !trial && old?.firstCharge == start
                 save(Payment(
                     id = payment?.id ?: java.util.UUID.randomUUID().toString(),
@@ -332,6 +330,7 @@ fun PaymentDetails(
     requestCancellation: Boolean = false,
     consumeCancellation: () -> Unit = {},
 ) {
+    val active = payment.termsOn(today)
     val next = payment.nextCharge(today)
     var cancelling by rememberSaveable { mutableStateOf(false) }
     var deleting by rememberSaveable { mutableStateOf(false) }
@@ -349,13 +348,13 @@ fun PaymentDetails(
     }
     Form {
         PaymentIcon(payment)
-        Text(money(payment.current.amount.toBigDecimal(), currency), style = MaterialTheme.typography.headlineMedium)
-        Text(payment.current.interval.label)
+        Text(money(active.amount.toBigDecimal(), currency), style = MaterialTheme.typography.headlineMedium)
+        Text(active.interval.label)
         if (payment.isTrial(today)) Text("Currently on a free trial")
         payment.trialDeadline(today)?.let {
             Text(if (payment.cancelBy != null) "Cancel by ${formatDate(it)}" else "First charge ${formatDate(it)}")
         }
-        if (next != null) Text("Next charge ${formatDate(next.date)}")
+        if (next != null) Text("Next charge ${money(next.amount, currency)} on ${formatDate(next.date)}")
         payment.end?.let {
             Text(when {
                 it < today -> "Ended ${formatDate(it)}"
@@ -367,6 +366,7 @@ fun PaymentDetails(
             onClick = { onCategory(payment.category) }, label = { Text(payment.category) },
         )
         if (payment.notes.isNotBlank()) Text(payment.notes)
+        PaymentPriceChanges(payment, today, currency, onSave)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (isWebLink(payment.manageLink)) DetailAction("Open provider page", Icons.AutoMirrored.Filled.ArrowForward) {
                 onOpenLink(payment.manageLink)
@@ -421,7 +421,7 @@ fun PaymentDetails(
 }
 
 @Composable
-private fun DetailAction(label: String, icon: ImageVector, destructive: Boolean = false, onClick: () -> Unit) {
+internal fun DetailAction(label: String, icon: ImageVector, destructive: Boolean = false, onClick: () -> Unit) {
     FilledTonalButton(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -490,8 +490,10 @@ fun PreferencesScreen(
     enableNotifications: () -> Unit,
     export: () -> Unit,
     import: () -> Unit,
+    testNotification: (Boolean) -> Unit,
 ) {
     var pickingTime by rememberSaveable { mutableStateOf(false) }
+    var testing by rememberSaveable { mutableStateOf(false) }
     Form {
         SettingsGroup("General") {
             CurrencyPicker(prefs.defaultCurrency) { save(prefs.copy(defaultCurrency = it)) }
@@ -516,6 +518,13 @@ fun PreferencesScreen(
                     save(prefs.copy(trialLead = it))
                 }
             }
+            if (prefs.trialReminders) ListItem(
+                headlineContent = { Text("Second trial reminder") },
+                supportingContent = { Text(if (prefs.trialLead == 1) "Already covered by your 1-day reminder" else "One day before the deadline or first charge") },
+                trailingContent = { Switch(prefs.secondTrialReminder, { save(prefs.copy(secondTrialReminder = it)) }) },
+                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            )
+            SettingsRow("Test notification", "Check trial or renewal notifications") { testing = true }
             val time = LocalTime.of(prefs.reminderHour, prefs.reminderMinute)
                 .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
             SettingsRow("Reminder time", time) { pickingTime = true }
@@ -533,6 +542,17 @@ fun PreferencesScreen(
             if (!BuildConfig.DEBUG) AppUpdates()
         }
     }
+    if (testing) AlertDialog(
+        onDismissRequest = { testing = false },
+        title = { Text("Test notification") },
+        text = {
+            Column {
+                TextButton(onClick = { testing = false; testNotification(true) }) { Text("Test trial reminder") }
+                TextButton(onClick = { testing = false; testNotification(false) }) { Text("Test renewal reminder") }
+            }
+        },
+        confirmButton = { TextButton(onClick = { testing = false }) { Text("Close") } },
+    )
     if (pickingTime) {
         ReminderTimeDialog(prefs, dismiss = { pickingTime = false }) { hour, minute ->
             save(prefs.copy(reminderHour = hour, reminderMinute = minute))

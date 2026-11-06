@@ -49,11 +49,11 @@ data class Payment(
     val current get() = terms.last()
     val end get() = lastActiveDay?.let(LocalDate::parse)
 
-    fun isTrial(today: LocalDate) = trial && !cancelled && today <= current.anchor &&
+    fun isTrial(today: LocalDate) = trial && !cancelled && today <= termsOn(today).anchor &&
         (end == null || today <= end)
 
     fun trialDeadline(today: LocalDate): LocalDate? =
-        if (isTrial(today)) cancelBy?.let(LocalDate::parse) ?: current.anchor else null
+        if (isTrial(today)) cancelBy?.let(LocalDate::parse) ?: termsOn(today).anchor else null
 }
 
 data class Charge(val payment: Payment, val date: LocalDate, val terms: Terms) {
@@ -97,6 +97,7 @@ data class Preferences(
     val reminderHour: Int = 9,
     val reminderMinute: Int = 0,
     val trialReminders: Boolean = true,
+    val secondTrialReminder: Boolean = false,
 )
 
 @Serializable
