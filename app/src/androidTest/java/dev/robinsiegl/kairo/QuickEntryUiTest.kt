@@ -26,7 +26,7 @@ class QuickEntryUiTest {
             }
         }
         compose.onNodeWithText("Search services").performTextInput("Spotify")
-        compose.onNodeWithText("Spotify").performClick()
+        compose.onNode(hasText("Spotify") and !hasSetTextAction()).performClick()
         compose.onNodeWithText("Payment name").assertTextContains("Spotify")
         compose.onNodeWithText("Save payment").performScrollTo().performClick()
         compose.runOnIdle { assertNull(saved) }
