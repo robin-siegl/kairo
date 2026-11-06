@@ -2,6 +2,8 @@ package dev.robinsiegl.kairo
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import java.time.LocalDate
@@ -40,12 +42,15 @@ class QuickEntryUiTest {
     }
 
     @Test
-    fun duplicateCanBeSavedAsAnIndependentPaymentWithoutOldCancellationOrPrices() {
+    fun duplicateCanBeSavedAtLargeTextWithoutOldCancellationOrPrices() {
         val original = Payment(name = "Example", trial = true, cancelBy = "2026-11-07", cancelled = true,
             lastActiveDay = "2026-11-08", remind = true, terms = listOf(Terms("2026-11-10", "9.99", Interval.Monthly)))
         var saved: Payment? = null
         compose.setContent {
-            MaterialTheme { PaymentEditor(null, Book(), today, original.duplicateDraft(today)) { saved = it } }
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 2f)) {
+                MaterialTheme { PaymentEditor(null, Book(), today, original.duplicateDraft(today)) { saved = it } }
+            }
         }
         compose.onNodeWithText("Save payment").performScrollTo().performClick()
         compose.runOnIdle {
