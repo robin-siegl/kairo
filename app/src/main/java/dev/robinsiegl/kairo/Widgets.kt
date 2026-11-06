@@ -178,7 +178,7 @@ internal object WidgetUpdates {
         visible.forEach { entry ->
             val row = RemoteViews(context.packageName, R.layout.widget_row)
             row.setImageViewResource(R.id.widget_icon, paymentSymbol(entry.payment.icon).drawable)
-            row.widgetColor(context, R.id.widget_icon, "setColorFilter", foreground)
+            if (!paymentSymbol(entry.payment.icon).brand) row.widgetColor(context, R.id.widget_icon, "setColorFilter", foreground)
             row.setTextViewText(R.id.widget_name, entry.payment.name)
             val date = when (entry.date) {
                 today -> "Today"

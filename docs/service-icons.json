@@ -1,0 +1,40 @@
+{
+  "commit": "e451c581fccb01b56f47e1a77292bdd1fd95b1a4",
+  "icons": [
+    {
+      "name": "Proton",
+      "slug": "proton",
+      "source": "https://proton.me/media/kit",
+      "rendition": "https://raw.githubusercontent.com/simple-icons/simple-icons/e451c581fccb01b56f47e1a77292bdd1fd95b1a4/icons/proton.svg",
+      "color": "#6D4AFF"
+    },
+    {
+      "name": "Proton Mail",
+      "slug": "protonmail",
+      "source": "https://proton.me/media/kit",
+      "rendition": "https://raw.githubusercontent.com/simple-icons/simple-icons/e451c581fccb01b56f47e1a77292bdd1fd95b1a4/icons/protonmail.svg",
+      "color": "#6D4AFF"
+    },
+    {
+      "name": "Proton Drive",
+      "slug": "protondrive",
+      "source": "https://proton.me/media/kit",
+      "rendition": "https://raw.githubusercontent.com/simple-icons/simple-icons/e451c581fccb01b56f47e1a77292bdd1fd95b1a4/icons/protondrive.svg",
+      "color": "#EB508D"
+    },
+    {
+      "name": "Proton VPN",
+      "slug": "protonvpn",
+      "source": "https://proton.me/media/kit",
+      "rendition": "https://raw.githubusercontent.com/simple-icons/simple-icons/e451c581fccb01b56f47e1a77292bdd1fd95b1a4/icons/protonvpn.svg",
+      "color": "#66DEB1"
+    },
+    {
+      "name": "Proton Calendar",
+      "slug": "protoncalendar",
+      "source": "https://proton.me/media/kit",
+      "rendition": "https://raw.githubusercontent.com/simple-icons/simple-icons/e451c581fccb01b56f47e1a77292bdd1fd95b1a4/icons/protoncalendar.svg",
+      "color": "#50B0E9"
+    }
+  ]
+}

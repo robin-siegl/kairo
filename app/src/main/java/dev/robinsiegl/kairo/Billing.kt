@@ -90,8 +90,13 @@ fun Payment.nextCharge(today: LocalDate): Charge? =
     charges(today, maxOf(today, current.anchor, current.effectiveDate).plusYears(1)).firstOrNull()
 
 @Serializable
+enum class ThemeMode(val label: String) { System("System default"), Light("Light"), Dark("Dark") }
+
+@Serializable
 data class Preferences(
     val defaultCurrency: String = "EUR",
+    val theme: ThemeMode = ThemeMode.System,
+    val dynamicColor: Boolean = false,
     val renewalLead: Int = 2,
     val trialLead: Int = 3,
     val reminderHour: Int = 9,
