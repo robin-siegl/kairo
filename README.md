@@ -16,6 +16,16 @@ Kairo is a local-first Android tracker for recurring payments and free trials. S
 
 Kairo has no accounts or bank connections. Production builds contact GitHub when you tap Check for updates. Provider links open in your browser.
 
+## Faster entry and appearance
+
+Start a payment from a searchable service preset or choose Add a custom payment. More than 50 presets fill the name, category and icon; enter your own price and confirm the charge date. They do not fetch prices, sign you in, or connect to a provider.
+
+Duplicate payment on the detail page opens an editable draft. It keeps the current amount, interval, category, icon, notes, tags and link, and starts at the next charge or today. The original history, trial deadlines, end dates, cancellation state and reminder opt-in are not copied. Nothing is added until you save.
+
+Settings offers system, light and dark themes, plus optional wallpaper colors on Android 12 and later. Kairo blue stays the default. Appearance settings are included in backups. Widgets retain their own system-based appearance.
+
+The icon picker includes an offline starter set of Proton service marks with credits in Settings. Other presets use generic symbols. Service marks sit on a neutral charcoal background to keep them separate from device accent colors. See [third-party notices](docs/THIRD_PARTY.md) for sources and usage terms.
+
 ## Reminders and price changes
 
 Enable a second trial reminder in Settings for an additional alert one day before the cancellation deadline or first charge. A one-day primary lead already covers this alert. Test trial and renewal notification channels from Settings.
