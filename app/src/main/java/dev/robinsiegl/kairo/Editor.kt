@@ -166,7 +166,6 @@ internal fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, draf
     var details by rememberSaveable { mutableStateOf(false) }
     var iconPickerOpen by rememberSaveable { mutableStateOf(false) }
     var iconQuery by rememberSaveable { mutableStateOf("") }
-    var iconGroup by rememberSaveable { mutableStateOf("All icons") }
     var attemptedSave by rememberSaveable { mutableStateOf(false) }
     val invalidLink = attemptedSave && link.isNotBlank() && !isWebLink(link.trim())
     Form {
@@ -274,15 +273,10 @@ internal fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, draf
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                         singleLine = true,
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("All icons", "Services").forEach { group ->
-                            FilterChip(selected = iconGroup == group, onClick = { iconGroup = group }, label = { Text(group) })
-                        }
-                    }
-                    val matches = remember(iconQuery, iconGroup) {
+                    val matches = remember(iconQuery) {
                         val words = iconQuery.trim().split(Regex("\\s+")).filter(String::isNotEmpty)
                         paymentIcons.filter { symbol ->
-                            (iconGroup != "Services" || symbol.brand) && words.all { "${symbol.label} ${symbol.group} ${symbol.keywords}".contains(it, ignoreCase = true) }
+                            words.all { "${symbol.label} ${symbol.group} ${symbol.keywords}".contains(it, ignoreCase = true) }
                         }
                     }
                     val selectedId = paymentSymbol(icon).id
@@ -297,8 +291,7 @@ internal fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, draf
                             val selected = selectedId == symbol.id
                             Surface(
                                 shape = MaterialTheme.shapes.small,
-                                color = if (symbol.brand) paymentIconContainer(symbol.id)
-                                    else if (selected) MaterialTheme.colorScheme.primaryContainer
+                                color = if (selected) MaterialTheme.colorScheme.primaryContainer
                                     else MaterialTheme.colorScheme.surfaceContainerHigh,
                                 border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
                             ) {
@@ -554,7 +547,6 @@ fun PreferencesScreen(
             SettingsRow("Merge from backup", "Add payments from a Kairo backup", import)
         }
         SettingsGroup("About") {
-            ServiceIconCredits()
             ListItem(
                 headlineContent = { Text("App version") },
                 supportingContent = { Text(BuildConfig.VERSION_NAME) },

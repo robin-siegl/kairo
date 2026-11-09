@@ -40,7 +40,7 @@ internal fun ServicePicker(choose: (ServicePreset?) -> Unit) {
                     headlineContent = { Text(service.name) },
                     supportingContent = { Text(service.category) },
                     leadingContent = {
-                        Surface(shape = MaterialTheme.shapes.medium, color = paymentIconContainer(service.icon)) {
+                        Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primaryContainer) {
                             Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { PaymentSymbolIcon(service.icon) }
                         }
                     },

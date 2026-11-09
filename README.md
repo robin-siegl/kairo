@@ -24,7 +24,7 @@ Duplicate payment on the detail page opens an editable draft. It keeps the curre
 
 Settings offers system, light and dark themes, plus optional wallpaper colors on Android 12 and later. Kairo blue stays the default. Appearance settings are included in backups. Widgets retain their own system-based appearance.
 
-The icon picker includes an offline starter set of Proton service marks with credits in Settings. Other presets use generic symbols. Service marks sit on a neutral charcoal background to keep them separate from device accent colors. See [third-party notices](docs/THIRD_PARTY.md) for sources and usage terms.
+All provider presets use the standard Material Symbols icon catalog.
 
 ## Reminders and price changes
 

@@ -53,4 +53,12 @@ class QuickEntryTest {
         val settings = old.copy(preferences = old.preferences.copy(theme = ThemeMode.Dark, dynamicColor = true))
         assertEquals(settings, decodeBook(encodeBook(settings)))
     }
+    @Test
+    fun removedServiceMarksInExistingPaymentsResolveToStandardSymbols() {
+        val aliases = mapOf("SERVICE_PROTON" to "SHIELD", "SERVICE_PROTON_MAIL" to "MAIL",
+            "SERVICE_PROTON_DRIVE" to "CLOUD", "SERVICE_PROTON_VPN" to "VPN", "SERVICE_PROTON_CALENDAR" to "CALENDAR")
+        aliases.forEach { (old, current) -> assertEquals(paymentSymbol(current), paymentSymbol(old)) }
+        assertTrue(servicePresets.all { preset -> paymentIcons.any { it.id == preset.icon } })
+    }
+
 }

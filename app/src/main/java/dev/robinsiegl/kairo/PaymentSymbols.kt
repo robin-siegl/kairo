@@ -9,11 +9,10 @@ internal data class PaymentSymbol(
     val group: String,
     val keywords: String,
     @DrawableRes val drawable: Int,
-    val brand: Boolean = false,
 )
 
 // Material Symbols catalog adapted from Nia. See docs/THIRD_PARTY.md.
-internal val genericPaymentIcons = listOf(
+internal val paymentIcons = listOf(
     PaymentSymbol("STAR", "Star", "Home & life", "favorite favourite saved bookmark", R.drawable.ic_material_star),
     PaymentSymbol("CAMERA", "Camera", "Media", "photo picture capture photography", R.drawable.ic_material_photo_camera),
     PaymentSymbol("BROWSER", "Browser", "Tech", "internet web globe online chrome firefox", R.drawable.ic_material_language),
@@ -209,18 +208,13 @@ internal val genericPaymentIcons = listOf(
     PaymentSymbol("FLASHLIGHT", "Flashlight", "Tech", "torch light lamp flash", R.drawable.ic_material_flashlight_on),
 )
 
-internal val serviceIcons = listOf(
-    PaymentSymbol("SERVICE_PROTON", "Proton", "Services", "privacy unlimited", R.drawable.ic_service_proton, brand = true),
-    PaymentSymbol("SERVICE_PROTON_MAIL", "Proton Mail", "Services", "email privacy", R.drawable.ic_service_protonmail, brand = true),
-    PaymentSymbol("SERVICE_PROTON_DRIVE", "Proton Drive", "Services", "cloud storage files", R.drawable.ic_service_protondrive, brand = true),
-    PaymentSymbol("SERVICE_PROTON_VPN", "Proton VPN", "Services", "network privacy", R.drawable.ic_service_protonvpn, brand = true),
-    PaymentSymbol("SERVICE_PROTON_CALENDAR", "Proton Calendar", "Services", "date schedule", R.drawable.ic_service_protoncalendar, brand = true),
-)
-
-internal val paymentIcons = genericPaymentIcons + serviceIcons
-
 internal fun paymentSymbol(id: String): PaymentSymbol {
     val symbolId = when (id) {
+        "SERVICE_PROTON" -> "SHIELD"
+        "SERVICE_PROTON_MAIL" -> "MAIL"
+        "SERVICE_PROTON_DRIVE" -> "CLOUD"
+        "SERVICE_PROTON_VPN" -> "VPN"
+        "SERVICE_PROTON_CALENDAR" -> "CALENDAR"
         "Payment" -> "STAR"
         "Home" -> "HOME"
         "Health" -> "HEART"

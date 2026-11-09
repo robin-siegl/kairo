@@ -47,6 +47,11 @@ fun money(amount: BigDecimal, currency: String): String =
     }.format(amount)
 
 @Composable
+internal fun PaymentSymbolIcon(id: String) {
+    Icon(painterResource(paymentSymbol(id).drawable), contentDescription = null, modifier = Modifier.size(24.dp))
+}
+
+@Composable
 internal fun PaymentIcon(payment: Payment) {
     PaymentSymbolIcon(payment.icon)
 }
@@ -133,7 +138,7 @@ private fun PaymentRow(
             headlineContent = { Text(payment.name) },
             supportingContent = { Text(detail) },
             leadingContent = {
-                Surface(shape = MaterialTheme.shapes.medium, color = paymentIconContainer(payment.icon)) {
+                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primaryContainer) {
                     Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { PaymentIcon(payment) }
                 }
             },
