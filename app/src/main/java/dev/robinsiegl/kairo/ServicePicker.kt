@@ -5,30 +5,38 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
 @Composable
 internal fun ServicePicker(choose: (ServicePreset?) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     val matches = remember(query) { matchingServices(query) }
-    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Start from a service or add your own payment.")
-        OutlinedButton(onClick = { choose(null) }, modifier = Modifier.fillMaxWidth()) { Text("Add a custom payment") }
-        OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true,
-            label = { Text("Search services") }, leadingIcon = { Icon(Icons.Default.Search, null) })
-        Text("Presets fill in a few details. You choose the price and charge date.", style = MaterialTheme.typography.bodySmall)
-        if (matches.isEmpty()) Text("No matching services. You can add a custom payment.")
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 24.dp)) {
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 112.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            item {
+                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true,
+                    label = { Text("Search services") }, leadingIcon = { Icon(Icons.Default.Search, null) })
+            }
+            item {
+                Text("Choose a service, then enter your price and charge date.", style = MaterialTheme.typography.bodySmall)
+            }
+            if (matches.isEmpty()) item { Text("No matching services. You can add a custom payment.") }
             items(matches, key = { it.id }) { service ->
                 ListItem(
-                    modifier = Modifier.clickable { choose(service) },
+                    modifier = Modifier.clip(MaterialTheme.shapes.large).clickable(role = Role.Button) { choose(service) },
                     headlineContent = { Text(service.name) },
                     supportingContent = { Text(service.category) },
                     leadingContent = {
@@ -36,9 +44,15 @@ internal fun ServicePicker(choose: (ServicePreset?) -> Unit) {
                             Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { PaymentSymbolIcon(service.icon) }
                         }
                     },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                 )
             }
         }
+        ExtendedFloatingActionButton(
+            onClick = { choose(null) },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            icon = { Icon(Icons.Default.Add, contentDescription = null) },
+            text = { Text("Custom payment") },
+        )
     }
 }
