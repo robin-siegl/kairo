@@ -16,6 +16,14 @@ Kairo is a local-first Android tracker for recurring payments and free trials. S
 
 Kairo has no accounts or bank connections. Production builds contact GitHub when you tap Check for updates. Provider links open in your browser.
 
+## Backup verification
+
+Exported JSON files are read back and checked against the exported data before Kairo reports them verified. If your document provider cannot read the saved file back, Kairo reports that it was saved without verification. Use Verify backup in Settings to check an existing file without changing your data.
+
+Merging shows a preview of new, unchanged and conflicting payments. Local edits and category colors are kept. New payments in a different currency cannot be merged into existing payments, because Kairo uses one global currency. When there are no local payments, importing adopts the incoming currency while retaining other local settings. Importing into an untouched app restores the backup's settings as well.
+
+JSON exports contain payments, price history, categories and app settings. Android backup also includes widget preferences. Android controls whether and when cloud backup and device restore happen; verifying a JSON file does not verify an Android cloud restore.
+
 ## Faster entry and appearance
 
 Start a payment from a searchable service preset or choose Add a custom payment. More than 50 presets fill the name, category and icon; enter your own price and confirm the charge date. They do not fetch prices, sign you in, or connect to a provider.

@@ -118,13 +118,20 @@ data class Merge(val book: Book, val added: Int, val conflicts: Int)
 fun Book.merge(incoming: Book): Merge {
     val existing = payments.associateBy { it.id }
     val added = incoming.payments.filter { it.id !in existing }
+    require(added.isEmpty() || payments.isEmpty() || preferences.defaultCurrency == incoming.preferences.defaultCurrency) {
+        "This backup uses ${incoming.preferences.defaultCurrency}, but your payments use ${preferences.defaultCurrency}. Currencies cannot be combined."
+    }
     val conflicts = incoming.payments.count { existing[it.id]?.let { local -> local != it } == true }
     return Merge(copy(
         payments = payments + added,
         categories = allCategories() + incoming.allCategories().filter { item ->
             allCategories().none { it.name == item.name }
         },
-        preferences = if (this == Book()) incoming.preferences else preferences,
+        preferences = when {
+            this == Book() -> incoming.preferences
+            payments.isEmpty() && added.isNotEmpty() -> preferences.copy(defaultCurrency = incoming.preferences.defaultCurrency)
+            else -> preferences
+        },
     ), added.size, conflicts)
 }
 
