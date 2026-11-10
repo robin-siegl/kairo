@@ -13,7 +13,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
@@ -33,7 +32,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.Lifecycle
@@ -60,25 +58,10 @@ class MainActivity : ComponentActivity() {
         val storage = Storage(this)
         val initial = runCatching(storage::read)
         setContent {
-            val dark = isSystemInDarkTheme()
-            val colors = if (dark) darkColorScheme(
-                primary = Color(0xFFADC6FF),
-                onPrimary = Color(0xFF002E6A),
-                primaryContainer = Color(0xFF1B449C),
-                onPrimaryContainer = Color(0xFFD8E5FF),
-                secondaryContainer = Color(0xFF3C4665),
-                onSecondaryContainer = Color(0xFFDDE3FF),
-            ) else lightColorScheme(
-                primary = Color(0xFF3367DB),
-                onPrimary = Color.White,
-                primaryContainer = Color(0xFFD8E5FF),
-                onPrimaryContainer = Color(0xFF101B37),
-                secondaryContainer = Color(0xFFE1E7F7),
-                onSecondaryContainer = Color(0xFF242F4A),
-            )
-            MaterialTheme(colorScheme = colors) {
+            var appearance by remember { mutableStateOf(initial.getOrNull()?.preferences ?: Preferences()) }
+            KairoTheme(appearance) {
                 if (initial.isSuccess) {
-                    Kairo(storage, initial.getOrThrow(), openedPayment, openedMonth) { openedPayment = null; openedMonth = null }
+                    Kairo(storage, initial.getOrThrow(), openedPayment, openedMonth, { appearance = it }) { openedPayment = null; openedMonth = null }
                 } else {
                     Surface { Text("Kairo couldn’t read your local data. Your file is still on this device.") }
                 }
@@ -100,7 +83,7 @@ private enum class Tab(val label: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, openedMonth: String?, clearOpened: () -> Unit) {
+private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, openedMonth: String?, appearanceChanged: (Preferences) -> Unit, clearOpened: () -> Unit) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val reminders = remember(context) { Reminders(context) }
@@ -124,6 +107,8 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
     var detailParent by rememberSaveable { mutableStateOf("") }
     var quickCancel by rememberSaveable { mutableStateOf(false) }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    var presetId by rememberSaveable { mutableStateOf<String?>(null) }
+    var duplicateSource by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingImport by remember { mutableStateOf<Book?>(null) }
     val selected = book.payments.find { it.id == selectedId }
 
@@ -137,6 +122,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
         return runCatching { storage.write(newBook) }.fold(
             onSuccess = {
                 book = newBook
+                appearanceChanged(newBook.preferences)
                 runCatching { reminders.refresh(book) }
                     .onFailure { scope.launch { snackbar.showSnackbar("Couldn’t update reminders.") } }
                 true
@@ -158,6 +144,8 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
     }
 
     fun openPayment(id: String) {
+        presetId = null
+        duplicateSource = null
         categoryEditorOpen = false
         if (screen != "edit") detailParent = if (screen == "category") "category" else ""
         quickCancel = false
@@ -183,6 +171,12 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
     fun back() {
         screen = when {
             screen == "edit" && selected != null -> "details"
+            screen == "edit" && duplicateSource != null -> {
+                selectedId = duplicateSource
+                duplicateSource = null
+                "details"
+            }
+            screen == "edit" -> "new"
             screen == "details" -> detailParent
             screen == "categories" -> ""
             screen == "category" && categoryOrigin != null -> {
@@ -286,6 +280,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                         }
                         Text(when (screen) {
                     "details" -> selected?.name ?: "Payment"
+                    "new" -> "Add payment"
                     "edit" -> if (selected == null) "Add payment" else "Edit payment"
                     "settings" -> "Settings"
                     "category" -> category.orEmpty().ifBlank { "Uncategorized" }
@@ -316,7 +311,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
             if (screen.isEmpty() && tab in listOf(Tab.Overview, Tab.Payments)) ExtendedFloatingActionButton(
                 text = { Text("Add payment") },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                onClick = { selectedId = null; screen = "edit" },
+                onClick = { selectedId = null; presetId = null; duplicateSource = null; detailParent = ""; screen = "new" },
             )
         },
         bottomBar = {
@@ -348,13 +343,23 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                 }
             }
             when (screen) {
-                "edit" -> PaymentEditor(selected, book, today) {
-                    if (savePayment(it)) {
-                        openPayment(it.id)
-                        if (!notificationsOn && ((it.isTrial(today) && book.preferences.trialReminders) || it.remind) &&
-                            Build.VERSION.SDK_INT >= 33 &&
-                            !context.getSharedPreferences("permission", MODE_PRIVATE).getBoolean("asked", false)
-                        ) enableNotifications()
+                "new" -> ServicePicker {
+                    presetId = it?.id
+                    screen = "edit"
+                }
+                "edit" -> key(selectedId, presetId, duplicateSource) {
+                    val draft = remember(presetId, duplicateSource) {
+                        duplicateSource?.let { id -> book.payments.find { it.id == id }?.duplicateDraft(today) }
+                            ?: servicePresets.find { it.id == presetId }?.draft(today)
+                    }
+                    PaymentEditor(selected, book, today, draft) {
+                        if (savePayment(it)) {
+                            openPayment(it.id)
+                            if (!notificationsOn && ((it.isTrial(today) && book.preferences.trialReminders) || it.remind) &&
+                                Build.VERSION.SDK_INT >= 33 &&
+                                !context.getSharedPreferences("permission", MODE_PRIVATE).getBoolean("asked", false)
+                            ) enableNotifications()
+                        }
                     }
                 }
                 "details" -> selected?.let {
@@ -372,6 +377,13 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                             saved
                         },
                         onCategory = ::openCategory,
+                        onDuplicate = {
+                            duplicateSource = it.id
+                            selectedId = null
+                            presetId = null
+                            detailParent = ""
+                            screen = "edit"
+                        },
                         requestCancellation = quickCancel,
                         consumeCancellation = { quickCancel = false },
                         onOpenLink = { url ->

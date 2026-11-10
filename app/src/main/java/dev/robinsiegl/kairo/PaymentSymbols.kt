@@ -210,6 +210,11 @@ internal val paymentIcons = listOf(
 
 internal fun paymentSymbol(id: String): PaymentSymbol {
     val symbolId = when (id) {
+        "SERVICE_PROTON" -> "SHIELD"
+        "SERVICE_PROTON_MAIL" -> "MAIL"
+        "SERVICE_PROTON_DRIVE" -> "CLOUD"
+        "SERVICE_PROTON_VPN" -> "VPN"
+        "SERVICE_PROTON_CALENDAR" -> "CALENDAR"
         "Payment" -> "STAR"
         "Home" -> "HOME"
         "Health" -> "HEART"

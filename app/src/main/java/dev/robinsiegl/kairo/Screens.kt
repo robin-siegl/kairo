@@ -47,8 +47,13 @@ fun money(amount: BigDecimal, currency: String): String =
     }.format(amount)
 
 @Composable
+internal fun PaymentSymbolIcon(id: String) {
+    Icon(painterResource(paymentSymbol(id).drawable), contentDescription = null, modifier = Modifier.size(24.dp))
+}
+
+@Composable
 internal fun PaymentIcon(payment: Payment) {
-    Icon(painterResource(paymentSymbol(payment.icon).drawable), contentDescription = null)
+    PaymentSymbolIcon(payment.icon)
 }
 
 @Composable

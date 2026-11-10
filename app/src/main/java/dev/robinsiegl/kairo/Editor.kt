@@ -1,6 +1,7 @@
 package dev.robinsiegl.kairo
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -11,6 +12,7 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DateRange
@@ -34,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import android.os.Build
 import java.net.URI
 import java.time.Instant
 import java.time.LocalDate
@@ -144,20 +147,20 @@ private fun isWebLink(value: String): Boolean = runCatching {
 }.getOrDefault(false)
 
 @Composable
-fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Payment) -> Unit) {
+internal fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, draft: PaymentDraft? = null, save: (Payment) -> Unit) {
     val old = payment?.termsOn(today)
-    var name by rememberSaveable { mutableStateOf(payment?.name.orEmpty()) }
-    var amount by rememberSaveable { mutableStateOf(old?.amount.orEmpty()) }
+    var name by rememberSaveable { mutableStateOf((payment?.name ?: draft?.name).orEmpty()) }
+    var amount by rememberSaveable { mutableStateOf((old?.amount ?: draft?.amount).orEmpty()) }
     val currency = book.preferences.defaultCurrency
-    var interval by rememberSaveable { mutableStateOf(old?.interval ?: Interval.Monthly) }
-    var start by rememberSaveable { mutableStateOf(old?.firstCharge ?: today.toString()) }
+    var interval by rememberSaveable { mutableStateOf(old?.interval ?: draft?.interval ?: Interval.Monthly) }
+    var start by rememberSaveable { mutableStateOf(old?.firstCharge ?: draft?.firstCharge ?: today.toString()) }
     var trial by rememberSaveable { mutableStateOf(payment?.isTrial(today) == true) }
     var cancelBy by rememberSaveable { mutableStateOf(payment?.cancelBy) }
     var end by rememberSaveable { mutableStateOf(payment?.lastActiveDay) }
-    var category by rememberSaveable { mutableStateOf(payment?.category.orEmpty()) }
-    var icon by rememberSaveable { mutableStateOf(payment?.icon ?: "Payment") }
-    var notes by rememberSaveable { mutableStateOf(payment?.notes.orEmpty()) }
-    var link by rememberSaveable { mutableStateOf(payment?.manageLink.orEmpty()) }
+    var category by rememberSaveable { mutableStateOf((payment?.category ?: draft?.category).orEmpty()) }
+    var icon by rememberSaveable { mutableStateOf(payment?.icon ?: draft?.icon ?: "Payment") }
+    var notes by rememberSaveable { mutableStateOf((payment?.notes ?: draft?.notes).orEmpty()) }
+    var link by rememberSaveable { mutableStateOf((payment?.manageLink ?: draft?.manageLink).orEmpty()) }
     var remind by rememberSaveable { mutableStateOf(payment?.remind ?: false) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var details by rememberSaveable { mutableStateOf(false) }
@@ -166,6 +169,7 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
     var attemptedSave by rememberSaveable { mutableStateOf(false) }
     val invalidLink = attemptedSave && link.isNotBlank() && !isWebLink(link.trim())
     Form {
+        if (payment == null && draft != null) Text("Review the price and first charge before saving.", style = MaterialTheme.typography.bodySmall)
         Text("Payment details", style = MaterialTheme.typography.titleMedium)
         Field("Payment name", name) { name = it }
         OutlinedTextField(amount, { amount = it }, Modifier.fillMaxWidth(),
@@ -196,7 +200,7 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
             FormRow(
                 "Payment icon",
                 paymentSymbol(icon).label,
-                trailing = { Icon(painterResource(paymentSymbol(icon).drawable), contentDescription = null) },
+                trailing = { PaymentSymbolIcon(icon) },
             ) {
                 iconQuery = ""
                 iconPickerOpen = true
@@ -244,7 +248,7 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
                     name = name.trim(),
                     terms = terms,
                     category = category.trim(),
-                    tags = payment?.tags.orEmpty(),
+                    tags = payment?.tags ?: draft?.tags.orEmpty(),
                     icon = icon,
                     notes = notes.trim(),
                     manageLink = link.trim(),
@@ -289,6 +293,7 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
                                 shape = MaterialTheme.shapes.small,
                                 color = if (selected) MaterialTheme.colorScheme.primaryContainer
                                     else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
                             ) {
                                 Box(
                                     Modifier.height(48.dp)
@@ -299,12 +304,7 @@ fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, save: (Paymen
                                         .semantics { contentDescription = symbol.label },
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    Icon(
-                                        painterResource(symbol.drawable),
-                                        contentDescription = null,
-                                        tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
-                                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
+                                    PaymentSymbolIcon(symbol.id)
                                 }
                             }
                         }
@@ -329,6 +329,7 @@ fun PaymentDetails(
     onCategory: (String) -> Unit = {},
     requestCancellation: Boolean = false,
     consumeCancellation: () -> Unit = {},
+    onDuplicate: () -> Unit = {},
 ) {
     val active = payment.termsOn(today)
     val next = payment.nextCharge(today)
@@ -367,6 +368,7 @@ fun PaymentDetails(
         )
         if (payment.notes.isNotBlank()) Text(payment.notes)
         PaymentPriceChanges(payment, today, currency, onSave)
+        DetailAction("Duplicate payment", Icons.Default.Add, onClick = onDuplicate)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (isWebLink(payment.manageLink)) DetailAction("Open provider page", Icons.AutoMirrored.Filled.ArrowForward) {
                 onOpenLink(payment.manageLink)
@@ -497,6 +499,17 @@ fun PreferencesScreen(
     Form {
         SettingsGroup("General") {
             CurrencyPicker(prefs.defaultCurrency) { save(prefs.copy(defaultCurrency = it)) }
+        }
+        SettingsGroup("Appearance") {
+            Choice("Theme", prefs.theme, ThemeMode.entries, { it.label }, settingsRow = true) {
+                save(prefs.copy(theme = it))
+            }
+            if (Build.VERSION.SDK_INT >= 31) ListItem(
+                headlineContent = { Text("Use device colors") },
+                supportingContent = { Text("Match your wallpaper colors instead of Kairo blue") },
+                trailingContent = { Switch(prefs.dynamicColor, { save(prefs.copy(dynamicColor = it)) }) },
+                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            )
         }
         SettingsGroup("Reminders") {
             SettingsRow("Notifications", if (notificationsOn) "Enabled" else "Review notification access", enableNotifications)
