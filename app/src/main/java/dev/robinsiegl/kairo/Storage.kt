@@ -15,6 +15,7 @@ const val MAX_BACKUP_BYTES = 20 * 1024 * 1024
 fun encodeBook(book: Book): String = json.encodeToString(book)
 
 fun decodeBook(text: String): Book {
+    require(text.encodeToByteArray().size <= MAX_BACKUP_BYTES)
     val book = json.decodeFromString<Book>(text)
     require(book.version == 1)
     require(book.payments.distinctBy { it.id }.size == book.payments.size)
@@ -33,8 +34,8 @@ fun decodeBook(text: String): Book {
             require(terms.anchor.year in 1900..9998 && terms.effectiveDate.year in 1900..9998)
             require(parseStoredAmount(terms.amount) != null)
         }
-        payment.end
-        payment.cancelBy?.let(LocalDate::parse)
+        require(payment.end?.year?.let { it in 1900..9998 } != false)
+        require(payment.cancelBy?.let(LocalDate::parse)?.year?.let { it in 1900..9998 } != false)
     }
     return book
 }
@@ -51,8 +52,7 @@ class Storage(private val context: Context) {
     }
 
     fun write(book: Book) = synchronized(lock) {
-        val bytes = encodeBook(book).encodeToByteArray()
-        require(bytes.size <= MAX_BACKUP_BYTES)
+        val bytes = verifiedBackupBytes(book)
         val stream = file.startWrite()
         try {
             stream.write(bytes)

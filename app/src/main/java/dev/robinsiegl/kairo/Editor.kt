@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,10 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
@@ -62,10 +67,22 @@ private fun Field(label: String, value: String, change: (String) -> Unit) {
 
 @Composable
 private fun Toggle(label: String, checked: Boolean, change: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).toggleable(checked, role = Role.Switch, onValueChange = change),
+        verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f))
-        Switch(checked, change)
+        Switch(checked, onCheckedChange = null)
     }
+}
+
+@Composable
+private fun SettingsSwitch(label: String, summary: String? = null, checked: Boolean, change: (Boolean) -> Unit) {
+    ListItem(
+        modifier = Modifier.toggleable(checked, role = Role.Switch, onValueChange = change),
+        headlineContent = { Text(label) },
+        supportingContent = summary?.let { { Text(it) } },
+        trailingContent = { Switch(checked, onCheckedChange = null) },
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    )
 }
 
 @Composable
@@ -167,13 +184,31 @@ internal fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, draf
     var iconPickerOpen by rememberSaveable { mutableStateOf(false) }
     var iconQuery by rememberSaveable { mutableStateOf("") }
     var attemptedSave by rememberSaveable { mutableStateOf(false) }
-    val invalidLink = attemptedSave && link.isNotBlank() && !isWebLink(link.trim())
+    var validationRequest by rememberSaveable { mutableIntStateOf(0) }
+    val price = if (amount == old?.amount) amount.toBigDecimal() else parseAmount(amount, currency)
+    val invalidName = attemptedSave && name.isBlank()
+    val invalidAmount = attemptedSave && price == null
+    val nameFocus = remember { FocusRequester() }
+    val amountFocus = remember { FocusRequester() }
+    val nameView = remember { BringIntoViewRequester() }
+    val amountView = remember { BringIntoViewRequester() }
+    LaunchedEffect(validationRequest) {
+        if (validationRequest == 0) return@LaunchedEffect
+        if (invalidName) { nameFocus.requestFocus(); nameView.bringIntoView() }
+        else if (invalidAmount) { amountFocus.requestFocus(); amountView.bringIntoView() }
+    }
+    val invalidLink = !invalidName && !invalidAmount && attemptedSave && link.isNotBlank() && !isWebLink(link.trim())
     Form {
         if (payment == null && draft != null) Text("Review the price and first charge before saving.", style = MaterialTheme.typography.bodySmall)
         Text("Payment details", style = MaterialTheme.typography.titleMedium)
-        Field("Payment name", name) { name = it }
-        OutlinedTextField(amount, { amount = it }, Modifier.fillMaxWidth(),
+        OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth().focusRequester(nameFocus).bringIntoViewRequester(nameView),
+            label = { Text("Payment name") }, singleLine = true, isError = invalidName,
+            supportingText = if (invalidName) { { Text("Enter a payment name.") } } else null)
+
+        OutlinedTextField(amount, { amount = it }, Modifier.fillMaxWidth().focusRequester(amountFocus).bringIntoViewRequester(amountView),
             label = { Text(if (trial) "Price after trial" else "Amount") },
+            isError = invalidAmount,
+            supportingText = if (invalidAmount) { { Text("Enter a valid amount for $currency.") } } else null,
             trailingIcon = { Text(currency, Modifier.padding(horizontal = 12.dp)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
         if (payment?.terms?.any { it.effectiveDate > today && it != old } == true) {
@@ -206,7 +241,7 @@ internal fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, draf
                 iconPickerOpen = true
             }
             val linkField = remember { BringIntoViewRequester() }
-            LaunchedEffect(invalidLink) {
+            LaunchedEffect(validationRequest) {
                 if (invalidLink) linkField.bringIntoView()
             }
             OutlinedTextField(
@@ -223,10 +258,11 @@ internal fun PaymentEditor(payment: Payment?, book: Book, today: LocalDate, draf
             DateField("Last active day (optional)", end, today) { end = it }
             if (end != null) TextButton(onClick = { end = null }) { Text("Clear end date") }
         }
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
         Button(modifier = Modifier.fillMaxWidth(), onClick = {
             attemptedSave = true
-            val price = if (amount == old?.amount) amount.toBigDecimal() else parseAmount(amount, currency)
+            validationRequest++
+            if (name.isBlank() || price == null) { error = null; return@Button }
             if (link.isNotBlank() && !isWebLink(link.trim())) {
                 details = true
                 error = null
@@ -493,6 +529,7 @@ fun PreferencesScreen(
     export: () -> Unit,
     import: () -> Unit,
     testNotification: (Boolean) -> Unit,
+    verifyBackup: () -> Unit,
 ) {
     var pickingTime by rememberSaveable { mutableStateOf(false) }
     var testing by rememberSaveable { mutableStateOf(false) }
@@ -504,39 +541,27 @@ fun PreferencesScreen(
             Choice("Theme", prefs.theme, ThemeMode.entries, { it.label }, settingsRow = true) {
                 save(prefs.copy(theme = it))
             }
-            if (Build.VERSION.SDK_INT >= 31) ListItem(
-                headlineContent = { Text("Use device colors") },
-                supportingContent = { Text("Match your wallpaper colors instead of Kairo blue") },
-                trailingContent = { Switch(prefs.dynamicColor, { save(prefs.copy(dynamicColor = it)) }) },
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            )
+            if (Build.VERSION.SDK_INT >= 31) SettingsSwitch("Use device colors",
+                "Match your wallpaper colors instead of Kairo blue", prefs.dynamicColor) {
+                save(prefs.copy(dynamicColor = it))
+            }
         }
         SettingsGroup("Reminders") {
             SettingsRow("Notifications", if (notificationsOn) "Enabled" else "Review notification access", enableNotifications)
             Choice("Renewal lead time", prefs.renewalLead, (1..7).toList(), ::dayLabel, settingsRow = true) {
                 save(prefs.copy(renewalLead = it))
             }
-            ListItem(
-                headlineContent = { Text("Remind me about trials") },
-                trailingContent = {
-                    Switch(
-                        checked = prefs.trialReminders,
-                        onCheckedChange = { save(prefs.copy(trialReminders = it)) },
-                    )
-                },
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            )
+            SettingsSwitch("Remind me about trials", checked = prefs.trialReminders) {
+                save(prefs.copy(trialReminders = it))
+            }
             if (prefs.trialReminders) {
                 Choice("Trial lead time", prefs.trialLead, (1..7).toList(), ::dayLabel, settingsRow = true) {
                     save(prefs.copy(trialLead = it))
                 }
             }
-            if (prefs.trialReminders) ListItem(
-                headlineContent = { Text("Second trial reminder") },
-                supportingContent = { Text(if (prefs.trialLead == 1) "Already covered by your 1-day reminder" else "One day before the deadline or first charge") },
-                trailingContent = { Switch(prefs.secondTrialReminder, { save(prefs.copy(secondTrialReminder = it)) }) },
-                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            )
+            if (prefs.trialReminders) SettingsSwitch("Second trial reminder",
+                if (prefs.trialLead == 1) "Already covered by your 1-day reminder" else "One day before the deadline or first charge",
+                prefs.secondTrialReminder) { save(prefs.copy(secondTrialReminder = it)) }
             SettingsRow("Test notification", "Check trial or renewal notifications") { testing = true }
             val time = LocalTime.of(prefs.reminderHour, prefs.reminderMinute)
                 .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
@@ -544,6 +569,7 @@ fun PreferencesScreen(
         }
         SettingsGroup("Backup") {
             SettingsRow("Export backup", "Save a copy of your payments and settings", export)
+            SettingsRow("Verify backup", "Check a file without changing your data", verifyBackup)
             SettingsRow("Merge from backup", "Add payments from a Kairo backup", import)
         }
         SettingsGroup("About") {

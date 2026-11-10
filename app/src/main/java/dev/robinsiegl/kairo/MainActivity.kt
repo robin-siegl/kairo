@@ -37,8 +37,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import java.io.ByteArrayOutputStream
-import java.io.InputStream
 import java.time.LocalDate
 import java.time.YearMonth
 import kotlinx.coroutines.Dispatchers
@@ -109,6 +107,7 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var presetId by rememberSaveable { mutableStateOf<String?>(null) }
     var duplicateSource by rememberSaveable { mutableStateOf<String?>(null) }
+    var verifyOnly by rememberSaveable { mutableStateOf(false) }
     var pendingImport by remember { mutableStateOf<Book?>(null) }
     val selected = book.payments.find { it.id == selectedId }
 
@@ -245,11 +244,16 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                 val result = withContext(Dispatchers.IO) {
                     runCatching {
                         requireNotNull(context.contentResolver.openOutputStream(uri, "wt")).use {
-                            it.write(encodeBook(snapshot).encodeToByteArray())
+                            it.write(verifiedBackupBytes(snapshot))
                         }
+                        verifyExport(snapshot) { requireNotNull(context.contentResolver.openInputStream(uri)) }
                     }
                 }
-                snackbar.showSnackbar(if (result.isSuccess) "Backup exported" else "Couldn’t export backup")
+                snackbar.showSnackbar(when {
+                    result.isFailure -> "Couldn’t export backup. Try another location."
+                    result.getOrNull() == true -> "Backup exported and verified"
+                    else -> "Backup saved, but verification failed. Use Verify backup to check the file."
+                })
             }
         }
     }
@@ -258,12 +262,12 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     requireNotNull(context.contentResolver.openInputStream(uri)).use {
-                        decodeBook(readBackup(it))
+                        readBackup(it)
                     }
                 }
             }
             result.onSuccess { pendingImport = it }
-                .onFailure { snackbar.showSnackbar("This file couldn’t be imported.") }
+                .onFailure { snackbar.showSnackbar("Couldn’t read a supported Kairo backup. Your data has not changed.") }
         }
     }
 
@@ -399,7 +403,8 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
                 "settings" -> PreferencesScreen(
                     book.preferences, notificationsOn && trialChannelOn && renewalChannelOn,
                     { save(book.copy(preferences = it)) }, ::enableNotifications,
-                    { export.launch("kairo-backup.json") }, { import.launch(arrayOf("application/json", "text/plain")) },
+                    { export.launch("kairo-backup.json") }, { verifyOnly = false; import.launch(arrayOf("application/json", "text/plain")) },
+                    verifyBackup = { verifyOnly = true; import.launch(arrayOf("application/json", "text/plain")) },
                     testNotification = { trial ->
                         if (reminders.test(trial)) scope.launch { snackbar.showSnackbar("Test notification sent") }
                         else {
@@ -446,34 +451,10 @@ private fun Kairo(storage: Storage, initial: Book, openedPayment: String?, opene
     }
 
     pendingImport?.let { incoming ->
-        val merge = book.merge(incoming)
-        AlertDialog(
-            onDismissRequest = { pendingImport = null },
-            title = { Text("Merge backup?") },
-            text = {
-                Text("${merge.added} new payments. ${merge.conflicts} changed payments will keep the version on this device. Category colors already on this device will be kept.")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (save(merge.book)) {
-                        pendingImport = null
-                        scope.launch { snackbar.showSnackbar("Backup merged") }
-                    }
-                }) { Text("Merge backup") }
-            },
-            dismissButton = { TextButton(onClick = { pendingImport = null }) { Text("Cancel") } },
-        )
+        BackupReviewDialog(book, incoming, verifyOnly, dismiss = { pendingImport = null }) { updated ->
+            val saved = save(updated)
+            if (saved) scope.launch { snackbar.showSnackbar("Backup merged") }
+            saved
+        }
     }
-}
-
-private fun readBackup(stream: InputStream): String {
-    val output = ByteArrayOutputStream()
-    val buffer = ByteArray(8192)
-    var count = stream.read(buffer)
-    while (count != -1) {
-        require(output.size() + count <= MAX_BACKUP_BYTES)
-        output.write(buffer, 0, count)
-        count = stream.read(buffer)
-    }
-    return output.toByteArray().decodeToString()
 }
